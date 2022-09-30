@@ -1,6 +1,7 @@
 #ifndef _DATA_H_
 #define _DATA_H_
 
+#include "../radixSort.hpp"
 #include <algorithm>
 #include <bitset>
 #include <cassert>
@@ -15,6 +16,8 @@
 #include <random>
 #include <tuple>
 #include <type_traits>
+
+using radixSort::DataElement;
 
 template <typename T> T getRandom() {
   uint32_t randomInts[std::max<int>(sizeof(T) / sizeof(uint32_t), 1)];
@@ -60,62 +63,12 @@ constexpr const char *inputDistributionToString() {
   }
 }
 
-template <typename K, typename... Ps> struct InputDataElement {
-  K key;
-  std::tuple<Ps...> payloads;
-
-  bool operator<(const InputDataElement &other) const {
-    return key < other.key;
-  }
-  bool operator>(const InputDataElement &other) const {
-    return key > other.key;
-  }
-  bool operator<=(const InputDataElement &other) const {
-    return key <= other.key;
-  }
-  bool operator>=(const InputDataElement &other) const {
-    return key >= other.key;
-  }
-  bool operator==(const InputDataElement &other) const {
-    return key == other.key;
-  }
-  bool operator!=(const InputDataElement &other) const {
-    return key != other.key;
-  }
-};
-
-// specialization for of InputDataElement for no payloads, because an empty
-// tuple still uses one byte of space, we don't want that
-template <typename K> struct InputDataElement<K> {
-  K key;
-
-  bool operator<(const InputDataElement &other) const {
-    return key < other.key;
-  }
-  bool operator>(const InputDataElement &other) const {
-    return key > other.key;
-  }
-  bool operator<=(const InputDataElement &other) const {
-    return key <= other.key;
-  }
-  bool operator>=(const InputDataElement &other) const {
-    return key >= other.key;
-  }
-  bool operator==(const InputDataElement &other) const {
-    return key == other.key;
-  }
-  bool operator!=(const InputDataElement &other) const {
-    return key != other.key;
-  }
-};
-
-template <typename K, typename... Ps> struct InputData {
+template <typename K, typename... Ps> struct Data {
   K *keys;
   std::tuple<Ps *...> payloads;
   std::size_t num;
 
-  InputData(std::size_t num, InputDistribution distribution,
-            uint seed = time(NULL))
+  Data(std::size_t num, InputDistribution distribution, uint seed = time(NULL))
       : num(num) {
     keys = new K[num];
     payloads = std::make_tuple(new Ps[num]...);
@@ -183,7 +136,7 @@ template <typename K, typename... Ps> struct InputData {
     makePayloads();
   }
 
-  InputData(const InputData &other) : num(other.num) {
+  Data(const Data &other) : num(other.num) {
     keys = new K[num];
     payloads = std::make_tuple(new Ps[num]...);
     std::copy(other.keys, other.keys + num, keys);
@@ -199,7 +152,7 @@ template <typename K, typename... Ps> struct InputData {
         payloads);
   }
 
-  ~InputData() {
+  ~Data() {
     delete[] keys;
     std::apply([](Ps *...payloads) { (..., delete[] payloads); }, payloads);
   }
@@ -231,7 +184,7 @@ template <typename K, typename... Ps> struct InputData {
     return true;
   }
 
-  bool checkThatEveryKeyIsThere(const InputData<K, Ps...> &other) const {
+  bool checkThatEveryKeyIsThere(const Data<K, Ps...> &other) const {
     for (std::size_t i = 0; i < other.num; i++) {
       if (std::find(keys, keys + num, other.keys[i]) == keys + num) {
         return false;
@@ -281,7 +234,7 @@ template <typename K, typename... Ps> struct InputData {
     return true;
   }
 
-  std::string checkData(bool up, const InputData<K, Ps...> &original,
+  std::string checkData(bool up, const Data<K, Ps...> &original,
                         bool checkSorted = true) const {
     bool passed = true;
     std::string errorMessage = "";
@@ -312,6 +265,12 @@ template <typename K, typename... Ps> struct InputData {
       passed = false;
       errorMessage += "new keys are there";
     }
+    // if not passed see if it was because nothing was done
+    if (!passed) {
+      if (memcmp(keys, original.keys, num * sizeof(K)) == 0) {
+        errorMessage += " (keys are the same)";
+      }
+    }
     return errorMessage;
   }
 
@@ -333,7 +292,7 @@ template <typename K, typename... Ps> struct InputData {
     std::cout << std::endl;
   }
 
-  void convertToSingleArray(InputDataElement<K, Ps...> *keysAndPayloads) const {
+  void convertToSingleArray(DataElement<K, Ps...> *keysAndPayloads) const {
     for (std::size_t i = 0; i < num; ++i) {
       keysAndPayloads[i].key = keys[i];
       if constexpr (sizeof...(Ps) > 0) {
@@ -346,7 +305,7 @@ template <typename K, typename... Ps> struct InputData {
     }
   }
 
-  void setFromSingleArray(InputDataElement<K, Ps...> *keysAndPayloads) {
+  void setFromSingleArray(DataElement<K, Ps...> *keysAndPayloads) {
     for (std::size_t i = 0; i < num; ++i) {
       keys[i] = keysAndPayloads[i].key;
       if constexpr (sizeof...(Ps) > 0) {

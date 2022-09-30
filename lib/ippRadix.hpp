@@ -162,6 +162,6 @@ template <bool Up = true, typename K> inline void sort(K *pSrcDst, int len) {
 
 } // namespace ippRadix
 
-#endif
+#endif // _IPP_RADIX_IS_PRESENT_
 
-#endif
+#endif // _IPP_RADIX_H_

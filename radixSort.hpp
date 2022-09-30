@@ -23,23 +23,31 @@
 // where num is the number of elements in the dataset, keyArray is a pointer
 // to the key array, and payloadArrays are the pointers to the payload arrays.
 //
+// Or, if key and payload datastreams are combined into a single array, call
+// the sort function like the following:
+//
+// radixSort::sort(num, (DataElement<K, Ps...> *) combinedArray);
+//
+// where num is the number of elements in the dataset, combinedArray is s
+// pointer to the combined array and K and Ps... are the types of the key and
+// the payloads.
+//
 // By default the sort function sorts in ascending order. To sort in descending
 // order, call the sort function with the template parameter "Up" set to false:
 // radixSort::sort<false>(num, keyArray, payloadArrays...);
+// or
+// radixSort::sort<false>(num, (DataElement<K, Ps...> *) combinedArray);
 //
 // For compilation with gcc, compile with the following flags:
 // -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi2
-// 
+//
 // The library requires at least C++17.
 //
 //=============================================================================
 
-
 #ifndef _RADIX_SORT_H_
 #define _RADIX_SORT_H_
 
-#include <cstdlib>
-#include <iostream>
 #ifdef __AVX512F__
 
 #include <bitset>
@@ -57,6 +65,57 @@ template <typename> inline constexpr bool always_false_v = false;
 
 namespace radixSort {
 
+template <typename K, typename... Ps> struct DataElement {
+  K key;
+  std::tuple<Ps...> payloads;
+  bool operator<(const DataElement &other) const { return key < other.key; }
+  bool operator>(const DataElement &other) const { return key > other.key; }
+};
+
+// specialization of DataElement for no payloads, because an empty
+// tuple still uses one byte of space, we don't want that
+template <typename K> struct DataElement<K> {
+  K key;
+  bool operator<(const DataElement &other) const { return key < other.key; }
+  bool operator>(const DataElement &other) const { return key > other.key; }
+};
+
+template <int Bytes> struct LargeUInt {
+  static_assert(Bytes > 8, "Bytes must be larger than 8");
+  static_assert((Bytes & (Bytes - 1)) == 0, "Bytes must be a power of 2");
+  uint64_t data[Bytes / 8];
+
+  LargeUInt() = default;
+  LargeUInt(const LargeUInt &) = default;
+  LargeUInt &operator=(const LargeUInt &) = default;
+
+  LargeUInt(uint64_t x) {
+    data[0] = x;
+    for (int i = 1; i < Bytes / 8; i++) {
+      data[i] = 0;
+    }
+  }
+};
+
+template <int Bytes> struct _UInt;
+template <> struct _UInt<1> { using type = uint8_t; };
+template <> struct _UInt<2> { using type = uint16_t; };
+template <> struct _UInt<4> { using type = uint32_t; };
+template <> struct _UInt<8> { using type = uint64_t; };
+template <int Bytes> struct _UInt { using type = LargeUInt<Bytes>; };
+
+template <int Bytes> using UInt = typename _UInt<Bytes>::type;
+
+template <int Bytes> UInt<Bytes> setBit(int n) {
+  if constexpr (Bytes <= 8) {
+    return UInt<Bytes>(1ULL << n);
+  } else {
+    UInt<Bytes> x;
+    x.data[n / 64] = 1ULL << (n % 64);
+    return x;
+  }
+}
+
 namespace simd {
 // simd library inspired by
 // the T-SIMD library written by Prof. Dr.-Ing. Ralf Möller:
@@ -65,30 +124,10 @@ namespace simd {
 template <typename T, int Bytes, typename = void> struct _MMRegType {
   static_assert(always_false_v<T>, "Unsupported type or number of bytes");
 };
-template <typename T>
-struct _MMRegType<T, 64, std::enable_if_t<std::is_integral_v<T>>> {
-  using type = __m512i;
-};
-template <typename T>
-struct _MMRegType<T, 32, std::enable_if_t<std::is_integral_v<T>>> {
-  using type = __m256i;
-};
-template <typename T>
-struct _MMRegType<T, 16, std::enable_if_t<std::is_integral_v<T>>> {
-  using type = __m128i;
-};
-template <typename T>
-struct _MMRegType<T, 8, std::enable_if_t<std::is_integral_v<T>>> {
-  using type = __m128i;
-};
-template <> struct _MMRegType<float, 64> { using type = __m512; };
-template <> struct _MMRegType<float, 32> { using type = __m256; };
-template <> struct _MMRegType<float, 16> { using type = __m128; };
-template <> struct _MMRegType<float, 8> { using type = __m128; };
-template <> struct _MMRegType<double, 64> { using type = __m512d; };
-template <> struct _MMRegType<double, 32> { using type = __m256d; };
-template <> struct _MMRegType<double, 16> { using type = __m128d; };
-template <> struct _MMRegType<double, 8> { using type = __m128d; };
+template <typename T> struct _MMRegType<T, 64> { using type = __m512i; };
+template <typename T> struct _MMRegType<T, 32> { using type = __m256i; };
+template <typename T> struct _MMRegType<T, 16> { using type = __m128i; };
+template <typename T> struct _MMRegType<T, 8> { using type = __m128i; };
 
 template <typename T, int Bytes>
 using MMRegType = typename _MMRegType<T, Bytes>::type;
@@ -129,6 +168,9 @@ template <> struct _MaskType<64> { using type = __mmask64; };
 template <> struct _MaskType<32> { using type = __mmask32; };
 template <> struct _MaskType<16> { using type = __mmask16; };
 template <> struct _MaskType<8> { using type = __mmask8; };
+template <> struct _MaskType<4> { using type = __mmask8; };
+template <> struct _MaskType<2> { using type = __mmask8; };
+template <> struct _MaskType<1> { using type = __mmask8; };
 
 template <int Size> using MaskType = typename _MaskType<Size>::type;
 
@@ -148,102 +190,91 @@ static INLINE Vec<Tdst, Bytes> reinterpret(const Vec<Tsrc, Bytes> &vec) {
   return reinterpret_cast<const Vec<Tdst, Bytes> &>(vec);
 }
 
-template <typename T, int Bytes = 64,
-          typename = std::enable_if_t<std::is_integral_v<T>>>
-static INLINE Vec<T, Bytes> set1(const T a) {
+template <typename T, int Bytes = 64>
+static INLINE Vec<T, Bytes> set_bit(const int bitNo) {
   if constexpr (Bytes == 64) {
     if constexpr (sizeof(T) == 1) {
-      return _mm512_set1_epi8(a);
+      return _mm512_set1_epi8(uint8_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 2) {
-      return _mm512_set1_epi16(a);
+      return _mm512_set1_epi16(uint16_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 4) {
-      return _mm512_set1_epi32(a);
+      return _mm512_set1_epi32(uint32_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 8) {
-      return _mm512_set1_epi64(a);
+      return _mm512_set1_epi64(uint64_t(1) << bitNo);
+    } else if constexpr (sizeof(T) == 16) {
+      return _mm512_maskz_set1_epi64(0b01010101 << (bitNo / 64),
+                                     uint64_t(1) << (bitNo % 64));
+    } else if constexpr (sizeof(T) == 32) {
+      return _mm512_maskz_set1_epi64(0b00010001 << (bitNo / 64),
+                                     uint64_t(1) << (bitNo % 64));
+    } else if constexpr (sizeof(T) == 64) {
+      return _mm512_maskz_set1_epi64(0b00000001 << (bitNo / 64),
+                                     uint64_t(1) << (bitNo % 64));
     } else {
-      static_assert(always_false_v<T>, "Unsupported integer size");
+      static_assert(always_false_v<T>, "Unsupported type size");
     }
   } else if constexpr (Bytes == 32) {
     if constexpr (sizeof(T) == 1) {
-      return _mm256_set1_epi8(a);
+      return _mm256_set1_epi8(uint8_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 2) {
-      return _mm256_set1_epi16(a);
+      return _mm256_set1_epi16(uint16_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 4) {
-      return _mm256_set1_epi32(a);
+      return _mm256_set1_epi32(uint32_t(1) << bitNo);
+    } else if constexpr (sizeof(T) == 8) {
+      return _mm256_set1_epi64x(uint64_t(1) << bitNo);
+#ifdef __AVX512VL__
+    } else if constexpr (sizeof(T) == 16) {
+      return _mm256_maskz_set1_epi64(0b0101 << (bitNo / 64),
+                                     uint64_t(1) << (bitNo % 64));
+    } else if constexpr (sizeof(T) == 32) {
+      return _mm256_maskz_set1_epi64(0b0001 << (bitNo / 64),
+                                     uint64_t(1) << (bitNo % 64));
+#endif // __AVX512VL__
     } else {
-      static_assert(always_false_v<T>, "Unsupported integer size");
+      static_assert(always_false_v<T>, "Unsupported type size");
     }
   } else if constexpr (Bytes == 16 || Bytes == 8) {
     if constexpr (sizeof(T) == 1) {
-      return _mm_set1_epi8(a);
+      return _mm_set1_epi8(uint8_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 2) {
-      return _mm_set1_epi16(a);
+      return _mm_set1_epi16(uint16_t(1) << bitNo);
     } else if constexpr (sizeof(T) == 4) {
-      return _mm_set1_epi32(a);
+      return _mm_set1_epi32(uint32_t(1) << bitNo);
+    } else if constexpr (sizeof(T) == 8) {
+      return _mm_set1_epi64x(uint64_t(1) << bitNo);
+#ifdef __AVX512VL__
+    } else if constexpr (sizeof(T) == 16) {
+      return _mm_maskz_set1_epi64(0b01 << (bitNo / 64), uint64_t(1)
+                                                            << (bitNo % 64));
+#endif // __AVX512VL__
     } else {
-      static_assert(always_false_v<T>, "Unsupported integer size");
+      static_assert(always_false_v<T>, "Unsupported type size");
     }
   } else {
-    static_assert(always_false_v<T>, "Unsupported integer size");
+    static_assert(always_false_v<T>, "Unsupported vector size");
   }
 }
 
 template <int Bytes = 64, typename T>
 static INLINE Vec<T, Bytes> loadu(const T *p) {
   if constexpr (Bytes == 64) {
-    if constexpr (std::is_integral_v<T>) {
-      return _mm512_loadu_si512(p);
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm512_loadu_ps(p);
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm512_loadu_pd(p);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
+    return _mm512_loadu_si512(p);
   } else if constexpr (Bytes == 32) {
-    if constexpr (std::is_integral_v<T>) {
-      return _mm256_loadu_si256((__m256i_u *)p);
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm256_loadu_ps(p);
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm256_loadu_pd(p);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
+    return _mm256_loadu_si256((__m256i_u *)p);
   } else if constexpr (Bytes == 16) {
-    if constexpr (std::is_integral_v<T>) {
-      return _mm_loadu_si128((__m128i_u *)p);
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm_loadu_ps(p);
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm_loadu_pd(p);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
+    return _mm_loadu_si128((__m128i_u *)p);
 #if defined(__AVX512BW__) && defined(__AVX512VL__)
   } else if constexpr (Bytes == 8) {
-    if constexpr (std::is_integral_v<T>) {
-      if constexpr (sizeof(T) == 1) {
-        return _mm_maskz_loadu_epi8(0xff, p);
-      } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
-      }
+    if constexpr (sizeof(T) == 1) {
+      return _mm_maskz_loadu_epi8(0xff, p);
     } else {
-      static_assert(always_false_v<T>, "Unsupported type");
+      static_assert(always_false_v<T>, "Unsupported type size");
     }
-#endif
+#endif // __AVX512BW__ && __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Vec<T, Bytes> result;
     for (int i = 0; i < Vec<T, Bytes>::numRegs; i++) {
-      if constexpr (std::is_integral_v<T>) {
-        result[i] = _mm512_loadu_si512(p + i * Vec<T, 64>::numElems);
-      } else if constexpr (std::is_same_v<T, float>) {
-        result[i] = _mm512_loadu_ps(p + i * Vec<T, 64>::numElems);
-      } else if constexpr (std::is_same_v<T, double>) {
-        result[i] = _mm512_loadu_pd(p + i * Vec<T, 64>::numElems);
-      } else {
-        static_assert(always_false_v<T>, "Unsupported type");
-      }
+      result[i] = _mm512_loadu_si512(p + i * Vec<T, 64>::numElems);
     }
     return result;
   } else {
@@ -255,120 +286,83 @@ template <int Bytes = 64, typename T>
 static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
                                         const T *p) {
   if constexpr (Bytes == 64) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm512_maskz_loadu_epi8(m, p);
-      } else if constexpr (sizeof(T) == 2) {
-        return _mm512_maskz_loadu_epi16(m, p);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 1) {
+      return _mm512_maskz_loadu_epi8(m, p);
+    } else if constexpr (sizeof(T) == 2) {
+      return _mm512_maskz_loadu_epi16(m, p);
+    } else
+#endif // __AVX512BW__
+      if constexpr (sizeof(T) == 4) {
         return _mm512_maskz_loadu_epi32(m, p);
-      } else if constexpr (sizeof(T) == 8) {
+      } else if constexpr (sizeof(T) <= 64) {
         return _mm512_maskz_loadu_epi64(m, p);
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm512_maskz_loadu_ps(m, p);
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm512_maskz_loadu_pd(m, p);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
 #ifdef __AVX512VL__
   } else if constexpr (Bytes == 32) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm256_maskz_loadu_epi8(m, (__m256i_u *)p);
-      } else if constexpr (sizeof(T) == 2) {
-        return _mm256_maskz_loadu_epi16(m, (__m256i_u *)p);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 1) {
+      return _mm256_maskz_loadu_epi8(m, (__m256i_u *)p);
+    } else if constexpr (sizeof(T) == 2) {
+      return _mm256_maskz_loadu_epi16(m, (__m256i_u *)p);
+    } else
+#endif // __AVX512BW__
+      if constexpr (sizeof(T) == 4) {
         return _mm256_maskz_loadu_epi32(m, (__m256i_u *)p);
-      } else if constexpr (sizeof(T) == 8) {
+      } else if constexpr (sizeof(T) <= 32) {
         return _mm256_maskz_loadu_epi64(m, (__m256i_u *)p);
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm256_maskz_loadu_ps(m, p);
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm256_maskz_loadu_pd(m, p);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
   } else if constexpr (Bytes == 16) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm_maskz_loadu_epi8(m, p);
-      } else if constexpr (sizeof(T) == 2) {
-        return _mm_maskz_loadu_epi16(m, p);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 1) {
+      return _mm_maskz_loadu_epi8(m, p);
+    } else if constexpr (sizeof(T) == 2) {
+      return _mm_maskz_loadu_epi16(m, p);
+    } else
+#endif // __AVX512BW__
+      if constexpr (sizeof(T) == 4) {
         return _mm_maskz_loadu_epi32(m, p);
-      } else if constexpr (sizeof(T) == 8) {
+      } else if constexpr (sizeof(T) <= 16) {
         return _mm_maskz_loadu_epi64(m, p);
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm_maskz_loadu_ps(m, p);
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm_maskz_loadu_pd(m, p);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
   } else if constexpr (Bytes == 8) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm_maskz_loadu_epi8(m & 0xff, p);
-      } else
-#endif
-      {
-        static_assert(always_false_v<T>, "Unsupported integer size");
-      }
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
+    if constexpr (sizeof(T) == 1) {
+      return _mm_maskz_loadu_epi8(m & 0xff, p);
+    } else
+#endif // __AVX512BW__
+    {
+      static_assert(always_false_v<T>, "Unsupported type size");
     }
 #endif // __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Vec<T, Bytes> result;
     Mask<Vec<T, Bytes>::numElems> mask = m;
     for (int i = 0; i < Vec<T, Bytes>::numRegs; i++) {
-      if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-        if constexpr (sizeof(T) == 1) {
-          result[i] =
-              _mm512_maskz_loadu_epi8(mask, p + i * Vec<T, 64>::numElems);
-        } else if constexpr (sizeof(T) == 2) {
-          result[i] =
-              _mm512_maskz_loadu_epi16(mask, p + i * Vec<T, 64>::numElems);
-        } else
-#endif
-            if constexpr (sizeof(T) == 4) {
+      if constexpr (sizeof(T) == 1) {
+        result[i] = _mm512_maskz_loadu_epi8(mask, p + i * Vec<T, 64>::numElems);
+      } else if constexpr (sizeof(T) == 2) {
+        result[i] =
+            _mm512_maskz_loadu_epi16(mask, p + i * Vec<T, 64>::numElems);
+      } else
+#endif // __AVX512BW__
+        if constexpr (sizeof(T) == 4) {
           result[i] =
               _mm512_maskz_loadu_epi32(mask, p + i * Vec<T, 64>::numElems);
-        } else if constexpr (sizeof(T) == 8) {
+        } else if constexpr (sizeof(T) <= 64) {
           result[i] =
               _mm512_maskz_loadu_epi64(mask, p + i * Vec<T, 64>::numElems);
         } else {
-          static_assert(always_false_v<T>, "Unsupported integer size");
+          static_assert(always_false_v<T>, "Unsupported type size");
         }
-      } else if constexpr (std::is_same_v<T, float>) {
-        result[i] = _mm512_maskz_loadu_ps(mask, p + i * Vec<T, 64>::numElems);
-      } else if constexpr (std::is_same_v<T, double>) {
-        result[i] = _mm512_maskz_loadu_pd(mask, p + i * Vec<T, 64>::numElems);
-      } else {
-        static_assert(always_false_v<T>, "Unsupported type");
-      }
-      mask = mask >> Vec<T, 64>::numElems;
+      mask = kshiftr(mask, Vec<T, 64>::numElems);
     }
     return result;
   } else {
@@ -381,111 +375,75 @@ static INLINE void mask_compressstoreu(T *p,
                                        const Mask<Vec<T, Bytes>::numElems> m,
                                        const Vec<T, Bytes> v) {
   if constexpr (Bytes == 64) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512VBMI2__
-      if constexpr (sizeof(T) == 1) {
-        _mm512_mask_compressstoreu_epi8(p, m, v);
-      } else if constexpr (sizeof(T) == 2) {
-        _mm512_mask_compressstoreu_epi16(p, m, v);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 1) {
+      _mm512_mask_compressstoreu_epi8(p, m, v);
+    } else if constexpr (sizeof(T) == 2) {
+      _mm512_mask_compressstoreu_epi16(p, m, v);
+    } else
+#endif // __AVX512VBMI2__
+      if constexpr (sizeof(T) == 4) {
         _mm512_mask_compressstoreu_epi32(p, m, v);
-      } else if constexpr (sizeof(T) == 8) {
+      } else if constexpr (sizeof(T) <= 64) {
         _mm512_mask_compressstoreu_epi64(p, m, v);
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      _mm512_mask_compressstoreu_ps(p, m, v);
-    } else if constexpr (std::is_same_v<T, double>) {
-      _mm512_mask_compressstoreu_pd(p, m, v);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
 #ifdef __AVX512VL__
   } else if constexpr (Bytes == 32) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512VBMI2__
-      if constexpr (sizeof(T) == 1) {
-        _mm256_mask_compressstoreu_epi8(p, m, v);
-      } else if constexpr (sizeof(T) == 2) {
-        _mm256_mask_compressstoreu_epi16(p, m, v);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 1) {
+      _mm256_mask_compressstoreu_epi8(p, m, v);
+    } else if constexpr (sizeof(T) == 2) {
+      _mm256_mask_compressstoreu_epi16(p, m, v);
+    } else
+#endif // __AVX512VBMI2__
+      if constexpr (sizeof(T) == 4) {
         _mm256_mask_compressstoreu_epi32(p, m, v);
-      } else if constexpr (sizeof(T) == 8) {
+      } else if constexpr (sizeof(T) <= 32) {
         _mm256_mask_compressstoreu_epi64(p, m, v);
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      _mm256_mask_compressstoreu_ps(p, m, v);
-    } else if constexpr (std::is_same_v<T, double>) {
-      _mm256_mask_compressstoreu_pd(p, m, v);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
   } else if constexpr (Bytes == 16) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512VBMI2__
-      if constexpr (sizeof(T) == 1) {
-        _mm_mask_compressstoreu_epi8(p, m, v);
-      } else if constexpr (sizeof(T) == 2) {
-        _mm_mask_compressstoreu_epi16(p, m, v);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 1) {
+      _mm_mask_compressstoreu_epi8(p, m, v);
+    } else if constexpr (sizeof(T) == 2) {
+      _mm_mask_compressstoreu_epi16(p, m, v);
+    } else
+#endif // __AVX512VBMI2__
+      if constexpr (sizeof(T) == 4) {
         _mm_mask_compressstoreu_epi32(p, m, v);
-      } else if constexpr (sizeof(T) == 8) {
+      } else if constexpr (sizeof(T) <= 16) {
         _mm_mask_compressstoreu_epi64(p, m, v);
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      _mm_mask_compressstoreu_ps(p, m, v);
-    } else if constexpr (std::is_same_v<T, double>) {
-      _mm_mask_compressstoreu_pd(p, m, v);
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
   } else if constexpr (Bytes == 8) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512VBMI2__
-      if constexpr (sizeof(T) == 1) {
-        _mm_mask_compressstoreu_epi8(p, m & 0xff, v);
-      } else
-#endif
-      {
-        static_assert(always_false_v<T>, "Unsupported integer size");
-      }
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
+    if constexpr (sizeof(T) == 1) {
+      _mm_mask_compressstoreu_epi8(p, m & 0xff, v);
+    } else
+#endif // __AVX512VBMI2__
+    {
+      static_assert(always_false_v<T>, "Unsupported type size");
     }
-#endif
+#endif // __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Mask<Vec<T, Bytes>::numElems> mask = m;
     for (int i = 0; i < Vec<T, Bytes>::numRegs; i++) {
-      if constexpr (std::is_integral_v<T>) {
-        if constexpr (sizeof(T) == 2) {
-          _mm512_mask_compressstoreu_epi16(p, mask, v[i]);
-        } else if constexpr (sizeof(T) == 4) {
-          _mm512_mask_compressstoreu_epi32(p, mask, v[i]);
-        } else if constexpr (sizeof(T) == 8) {
-          _mm512_mask_compressstoreu_epi64(p, mask, v[i]);
-        } else {
-          static_assert(always_false_v<T>, "Unsupported integer size");
-        }
-      } else if constexpr (std::is_same_v<T, float>) {
-        _mm512_mask_compressstoreu_ps(p, mask, v[i]);
-      } else if constexpr (std::is_same_v<T, double>) {
-        _mm512_mask_compressstoreu_pd(p, mask, v[i]);
+      if constexpr (sizeof(T) == 2) {
+        _mm512_mask_compressstoreu_epi16(p, mask, v[i]);
+      } else if constexpr (sizeof(T) == 4) {
+        _mm512_mask_compressstoreu_epi32(p, mask, v[i]);
+      } else if constexpr (sizeof(T) <= 64) {
+        _mm512_mask_compressstoreu_epi64(p, mask, v[i]);
       } else {
-        static_assert(always_false_v<T>, "Unsupported type");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
       p += kpopcnt((Mask<Vec<T, 64>::numElems>)mask);
-      mask = mask >> Vec<T, 64>::numElems;
+      mask = kshiftr(mask, Vec<T, 64>::numElems);
     }
   } else {
     static_assert(always_false_v<T>, "Unsupported vector size");
@@ -493,143 +451,156 @@ static INLINE void mask_compressstoreu(T *p,
 }
 
 template <typename T, int Bytes>
-static INLINE Mask<Vec<T, Bytes>::numElems> test_mask(const Vec<T, Bytes> a,
-                                                      const Vec<T, Bytes> b) {
+static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
+                                                     const int bitNo) {
   if constexpr (Bytes == 64) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm512_test_epi8_mask(a, b);
-      } else if constexpr (sizeof(T) == 2) {
-        return _mm512_test_epi16_mask(a, b);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
-        return _mm512_test_epi32_mask(a, b);
+    if constexpr (sizeof(T) == 1) {
+      return _mm512_test_epi8_mask(v, set_bit<T, Bytes>(bitNo));
+    } else if constexpr (sizeof(T) == 2) {
+      return _mm512_test_epi16_mask(v, set_bit<T, Bytes>(bitNo));
+    } else
+#endif // __AVX512BW__
+      if constexpr (sizeof(T) == 4) {
+        return _mm512_test_epi32_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 8) {
-        return _mm512_test_epi64_mask(a, b);
+        return _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+      } else if constexpr (sizeof(T) == 16) {
+        __mmask8 mask = _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+        if (bitNo < 64) {
+          // mask is now 0b0a 0b 0c 0d, we want 0baa bb cc dd
+          return mask | (mask << 1);
+        } else {
+          // mask is now 0ba0 b0 c0 d0, we want 0baa bb cc dd
+          return mask | (mask >> 1);
+        }
+      } else if constexpr (sizeof(T) == 32) {
+        __mmask8 mask = _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+        if (bitNo < 64) {
+          // mask is now 0b000a 000b, we want 0baaaa bbbb
+          return mask | (mask << 1) | (mask << 2) | (mask << 3);
+        } else if (bitNo < 128) {
+          // mask is now 0b00a0 00b0, we want 0baaaa bbbb
+          return (mask >> 1) | mask | (mask << 1) | (mask << 2);
+        } else if (bitNo < 192) {
+          // mask is now 0b0a00 0b00, we want 0baaaa bbbb
+          return (mask >> 2) | (mask >> 1) | mask | (mask << 1);
+        } else {
+          // mask is now 0ba000 b000, we want 0baaaa bbbb
+          return (mask >> 3) | (mask >> 2) | (mask >> 1) | mask;
+        }
+      } else if constexpr (sizeof(T) == 64) {
+        __mmask8 mask = _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+        // mask is now 0b0000 000a, or 0b0000 00a0, or ...
+        // we want 0baaaa aaaa
+        return mask == 0 ? 0 : 0xff;
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm512_test_epi32_mask(reinterpret<uint32_t>(a),
-                                    reinterpret<uint32_t>(b));
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm512_test_epi64_mask(reinterpret<uint64_t>(a),
-                                    reinterpret<uint64_t>(b));
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
 #ifdef __AVX512VL__
   } else if constexpr (Bytes == 32) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm256_test_epi8_mask(a, b);
-      } else if constexpr (sizeof(T) == 2) {
-        return _mm256_test_epi16_mask(a, b);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
-        return _mm256_test_epi32_mask(a, b);
+    if constexpr (sizeof(T) == 1) {
+      return _mm256_test_epi8_mask(v, set_bit<T, Bytes>(bitNo));
+    } else if constexpr (sizeof(T) == 2) {
+      return _mm256_test_epi16_mask(v, set_bit<T, Bytes>(bitNo));
+    } else
+#endif // __AVX512BW__
+      if constexpr (sizeof(T) == 4) {
+        return _mm256_test_epi32_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 8) {
-        return _mm256_test_epi64_mask(a, b);
+        return _mm256_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm256_test_epi32_mask(reinterpret<uint32_t>(a),
-                                    reinterpret<uint32_t>(b));
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm256_test_epi64_mask(reinterpret<uint64_t>(a),
-                                    reinterpret<uint64_t>(b));
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
   } else if constexpr (Bytes == 16 || Bytes == 8) {
-    if constexpr (std::is_integral_v<T>) {
 #ifdef __AVX512BW__
-      if constexpr (sizeof(T) == 1) {
-        return _mm_test_epi8_mask(a, b);
-      } else if constexpr (sizeof(T) == 2) {
-        return _mm_test_epi16_mask(a, b);
-      } else
-#endif
-          if constexpr (sizeof(T) == 4) {
-        return _mm_test_epi32_mask(a, b);
+    if constexpr (sizeof(T) == 1) {
+      return _mm_test_epi8_mask(v, set_bit<T, Bytes>(bitNo));
+    } else if constexpr (sizeof(T) == 2) {
+      return _mm_test_epi16_mask(v, set_bit<T, Bytes>(bitNo));
+    } else
+#endif // __AVX512BW__
+      if constexpr (sizeof(T) == 4) {
+        return _mm_test_epi32_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 8) {
-        return _mm_test_epi64_mask(a, b);
+        return _mm_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
       } else {
-        static_assert(always_false_v<T>, "Unsupported integer size");
+        static_assert(always_false_v<T>, "Unsupported type size");
       }
-    } else if constexpr (std::is_same_v<T, float>) {
-      return _mm_test_epi32_mask(reinterpret<uint32_t>(a),
-                                 reinterpret<uint32_t>(b));
-    } else if constexpr (std::is_same_v<T, double>) {
-      return _mm_test_epi64_mask(reinterpret<uint64_t>(a),
-                                 reinterpret<uint64_t>(b));
-    } else {
-      static_assert(always_false_v<T>, "Unsupported type");
-    }
-#endif
+#endif // __AVX512VL__
   } else {
     static_assert(always_false_v<T>, "Unsupported vector size");
   }
 }
 
 template <int Size> static INLINE int kpopcnt(const Mask<Size> m) {
-  return _mm_popcnt_u64(m);
+  if constexpr (Size < 8) {
+    return _mm_popcnt_u64(m) / (8 / Size);
+  } else {
+    return _mm_popcnt_u64(m);
+  }
 }
 
 template <int Size> static INLINE Mask<Size> knot(const Mask<Size> m) {
 #ifdef __AVX512DQ__
-  if constexpr (Size == 8) {
+  if constexpr (Size <= 8) {
     return _knot_mask8(m);
   } else
-#endif
-      if constexpr (Size == 16) {
-    return _knot_mask16(m);
+#endif // __AVX512DQ__
+    if constexpr (Size == 16) {
+      return _knot_mask16(m);
 #ifdef __AVX512BW__
-  } else if constexpr (Size == 32) {
-    return _knot_mask32(m);
-  } else if constexpr (Size == 64) {
-    return _knot_mask64(m);
-#endif
-  } else {
-    static_assert(always_false_v<Mask<Size>>, "Unsupported mask size");
-  }
+    } else if constexpr (Size == 32) {
+      return _knot_mask32(m);
+    } else if constexpr (Size == 64) {
+      return _knot_mask64(m);
+#endif // __AVX512BW__
+    } else {
+      static_assert(always_false_v<Mask<Size>>, "Unsupported mask size");
+    }
 }
 
 template <int Size>
 static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
 #ifdef __AVX512DQ__
-  if constexpr (Size == 8) {
+  if constexpr (Size <= 8) {
     return _kand_mask8(m1, m2);
   } else
-#endif
-      if constexpr (Size == 16) {
-    return _kand_mask16(m1, m2);
+#endif // __AVX512DQ__
+    if constexpr (Size == 16) {
+      return _kand_mask16(m1, m2);
 #ifdef __AVX512BW__
-  } else if constexpr (Size == 32) {
-    return _kand_mask32(m1, m2);
-  } else if constexpr (Size == 64) {
-    return _kand_mask64(m1, m2);
-#endif
+    } else if constexpr (Size == 32) {
+      return _kand_mask32(m1, m2);
+    } else if constexpr (Size == 64) {
+      return _kand_mask64(m1, m2);
+#endif // __AVX512BW__
+    } else {
+      static_assert(always_false_v<Mask<Size>>, "Unsupported mask size");
+    }
+}
+
+template <int Size>
+static INLINE Mask<Size> kshiftr(const Mask<Size> m, const int n) {
+  if constexpr (Size <= 8) {
+    return m >> (n * (8 / Size));
   } else {
-    static_assert(always_false_v<Mask<Size>>, "Unsupported mask size");
+    return m >> n;
+  }
+}
+
+template <int Size>
+static INLINE Mask<Size> kshiftl(const Mask<Size> m, const int n) {
+  if constexpr (Size <= 8) {
+    return m << (n * (8 / Size));
+  } else {
+    return m << n;
   }
 }
 } // namespace simd
 
 using SortIndex = ssize_t;
-
-template <int Bytes> struct _UInt;
-template <> struct _UInt<1> { using type = uint8_t; };
-template <> struct _UInt<2> { using type = uint16_t; };
-template <> struct _UInt<4> { using type = uint32_t; };
-template <> struct _UInt<8> { using type = uint64_t; };
-
-template <int Bytes> using UInt = typename _UInt<Bytes>::type;
 
 template <typename T> INLINE bool isBitSet(int bitNo, T val) {
   UInt<sizeof(T)> valAsUInt;
@@ -637,8 +608,23 @@ template <typename T> INLINE bool isBitSet(int bitNo, T val) {
   return (valAsUInt >> bitNo) & 1;
 }
 
-template <typename K, bool Up, bool IsHighestBit, bool IsRightSide>
+template <typename K, typename... Ps>
+INLINE bool isBitSet(int bitNo, DataElement<K, Ps...> val) {
+  UInt<sizeof(K)> valAsUInt;
+  memcpy(&valAsUInt, &val.key, sizeof(K));
+  return (valAsUInt >> bitNo) & 1;
+}
+
+template <typename T> struct _KeyType { using type = T; };
+template <typename K, typename... Ps> struct _KeyType<DataElement<K, Ps...>> {
+  using type = K;
+};
+
+template <typename T> using KeyType = typename _KeyType<T>::type;
+
+template <typename T, bool Up, bool IsHighestBit, bool IsRightSide>
 constexpr bool bitDirUp() {
+  using K = KeyType<T>;
   if constexpr (std::__is_unsigned_integer<K>::value) {
     return Up;
   }
@@ -705,7 +691,7 @@ struct CmpSorterBramasSmallSort {
     }
   }
 };
-#endif
+#endif // defined(SORT512_HPP) && defined(SORT512KV_HPP)
 
 struct CmpSorterNoSort {
   static std::string name() { return "CmpSorterNoSort"; }
@@ -755,7 +741,6 @@ struct BitSorterNoSort {
   }
 };
 
-#ifdef __AVX512F__
 template <bool OneReg = false> struct BitSorterSIMD {
   static std::string name() {
     if constexpr (OneReg) {
@@ -830,8 +815,8 @@ template <bool OneReg = false> struct BitSorterSIMD {
     simd::Vec<K, _numElemsPerVec * sizeof(K)> keyVecRest;
     std::tuple<simd::Vec<Ps, _numElemsPerVec * sizeof(Ps)>...> payloadVecRest;
     if (numElemsRest != 0) {
-      restMask = (simd::knot(simd::Mask<_numElemsPerVec>(0))) >>
-                 (_numElemsPerVec - numElemsRest);
+      restMask = simd::kshiftr(simd::knot(simd::Mask<_numElemsPerVec>(0)),
+                               _numElemsPerVec - numElemsRest);
       keyVecRest = simd::maskz_loadu<_numElemsPerVec * sizeof(K)>(
           restMask, &keys[readPosLeft]);
       payloadVecRest =
@@ -877,15 +862,12 @@ private:
                            simd::Mask<numElemsPerVec<K, Ps...>>>
   getSortMasks(simd::Vec<K, numElemsPerVec<K, Ps...> * sizeof(K)> keyVec,
                int bitNo) {
-    auto bitMaskVec = simd::reinterpret<K>(
-        simd::set1<UInt<sizeof(K)>, numElemsPerVec<K, Ps...> * sizeof(K)>(
-            UInt<sizeof(K)>(1) << bitNo));
     if constexpr (bitDirUp<K, Up, IsHighestBit, IsRightSide>()) {
-      auto sortMaskRight = simd::test_mask(keyVec, bitMaskVec);
+      auto sortMaskRight = simd::test_bit(keyVec, bitNo);
       auto sortMaskLeft = simd::knot(sortMaskRight);
       return std::make_tuple(sortMaskLeft, sortMaskRight);
     } else {
-      auto sortMaskLeft = simd::test_mask(keyVec, bitMaskVec);
+      auto sortMaskLeft = simd::test_bit(keyVec, bitNo);
       auto sortMaskRight = simd::knot(sortMaskLeft);
       return std::make_tuple(sortMaskLeft, sortMaskRight);
     }
@@ -919,7 +901,6 @@ private:
         payloadVec);
   }
 };
-#endif
 
 template <bool Up, typename BitSorter, typename CmpSorter,
           bool IsRightSide = false, bool IsHighestBit = true, typename K,
@@ -958,9 +939,29 @@ void sort(SortIndex cmpSortThreshold, SortIndex num, K *keys, Ps *...payloads) {
     cmpSortThreshold =
         std::min(cmpSortThreshold, (SortIndex)(16 * 64 / sizeof(K)));
   }
-#endif
+#endif // SORT512_HPP && SORT512KV_HPP
   radixRecursion<Up, BitSorter, CmpSorter>(sizeof(K) * 8 - 1, cmpSortThreshold,
                                            0, num - 1, keys, payloads...);
+}
+
+template <bool Up, typename BitSorter, typename CmpSorter, typename K,
+          typename... Ps>
+void sort(SortIndex cmpSortThreshold, SortIndex num,
+          DataElement<K, Ps...> *elements) {
+  static_assert(simd::is_power_of_two<sizeof(DataElement<K, Ps...>)>,
+                "size of DataElement<K, Ps...> must be a power of two");
+#if defined(SORT512_HPP) && defined(SORT512KV_HPP)
+  if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
+    // bramas small sort only supports as many elements as fit in 16 avx512
+    // registers
+    cmpSortThreshold =
+        std::min(cmpSortThreshold, (SortIndex)(16 * 64 / sizeof(K)));
+  }
+#endif // SORT512_HPP && SORT512KV_HPP
+  // static_assert(sizeof(K) >= (sizeof(Ps) + ...), "Sum of payload sizes must
+  // be smaller than or equal to key size");
+  radixRecursion<Up, BitSorter, CmpSorter>(sizeof(K) * 8 - 1, cmpSortThreshold,
+                                           0, num - 1, elements);
 }
 
 template <bool Up = true, typename K, typename... Ps>
@@ -972,4 +973,4 @@ void sort(SortIndex num, K *keys, Ps *...payloads) {
 
 #endif // __AVX512F__
 
-#endif
+#endif // _RADIX_SORT_H_

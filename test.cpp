@@ -17,7 +17,7 @@
 
 using namespace radixSort;
 
-template <bool Up, InputDistribution Distribution,
+template <bool Combined, bool Up, InputDistribution Distribution,
           typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
@@ -27,18 +27,36 @@ bool test(std::size_t num, uint seed = time(NULL)) {
     std::cout << "Ps: ";
     ((std::cout << type_name<Ps> << ", "), ...);
   }
+  if constexpr (Combined) {
+    std::cout << "Combined, ";
+  } else {
+    std::cout << "Separate, ";
+  }
   std::cout << "Distribution: " << inputDistributionToString<Distribution>()
             << ", "
             << "Up: " << Up << ", " << BitSorter::name() << ", "
             << CmpSorter::name() << ", ";
-  InputData<K, Ps...> data(num, Distribution, seed);
-  InputData<K, Ps...> copyOfData(data);
-  // data.printBinary();
-  std::apply(
-      [&](auto *...payloads) {
-        sort<Up, BitSorter, CmpSorter>(16, data.num, data.keys, payloads...);
-      },
-      data.payloads);
+  if constexpr (false && Combined && sizeof(DataElement<K, Ps...>) <= 8) {
+    std::cout << "NOT TESTING" << std::endl;
+    return true;
+  }
+  Data<K, Ps...> data(num, Distribution, seed);
+  Data<K, Ps...> copyOfData(data);
+  // std::cout << std::endl; data.printBinary();
+  if constexpr (Combined) {
+    DataElement<K, Ps...> *keysAndPayloads = (DataElement<K, Ps...> *)malloc(
+        data.num * sizeof(DataElement<K, Ps...>));
+    data.convertToSingleArray(keysAndPayloads);
+    sort<Up, BitSorter, CmpSorter>(16, data.num, keysAndPayloads);
+    data.setFromSingleArray(keysAndPayloads);
+    free(keysAndPayloads);
+  } else {
+    std::apply(
+        [&](auto *...payloads) {
+          sort<Up, BitSorter, CmpSorter>(16, data.num, data.keys, payloads...);
+        },
+        data.payloads);
+  }
   // data.printBinary();
   // data.keys[1] = data.keys[0];
   // std::apply(
@@ -56,41 +74,45 @@ bool test(std::size_t num, uint seed = time(NULL)) {
   }
 }
 
-template <bool Up, typename BitSorter = BitSorterSequential,
+template <bool Combined, bool Up, typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
 bool testAllDistributions(std::size_t num, uint seed = time(NULL)) {
-  bool passed = true;
-  passed &=
-      test<Up, InputDistribution::Gaussian, BitSorter, CmpSorter, K, Ps...>(
-          num, seed);
-  passed &=
-      test<Up, InputDistribution::Uniform, BitSorter, CmpSorter, K, Ps...>(
-          num, seed);
-  passed &= test<Up, InputDistribution::Zero, BitSorter, CmpSorter, K, Ps...>(
-      num, seed);
-  passed &=
-      test<Up, InputDistribution::ZeroOne, BitSorter, CmpSorter, K, Ps...>(
-          num, seed);
-  passed &= test<Up, InputDistribution::Sorted, BitSorter, CmpSorter, K, Ps...>(
-      num, seed);
-  passed &= test<Up, InputDistribution::ReverseSorted, BitSorter, CmpSorter, K,
-                 Ps...>(num, seed);
-  passed &=
-      test<Up, InputDistribution::AlmostSorted, BitSorter, CmpSorter, K, Ps...>(
-          num, seed);
-  passed &= test<Up, InputDistribution::AlmostReverseSorted, BitSorter,
-                 CmpSorter, K, Ps...>(num, seed);
-
-  return passed;
+  if constexpr (Combined &&
+                !simd::is_power_of_two<sizeof(DataElement<K, Ps...>)>) {
+    return true;
+  } else {
+    bool passed = true;
+    passed &= test<Combined, Up, InputDistribution::Gaussian, BitSorter,
+                   CmpSorter, K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::Uniform, BitSorter,
+                   CmpSorter, K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::Zero, BitSorter, CmpSorter,
+                   K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::ZeroOne, BitSorter,
+                   CmpSorter, K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::Sorted, BitSorter,
+                   CmpSorter, K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::ReverseSorted, BitSorter,
+                   CmpSorter, K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::AlmostSorted, BitSorter,
+                   CmpSorter, K, Ps...>(num, seed);
+    passed &= test<Combined, Up, InputDistribution::AlmostReverseSorted,
+                   BitSorter, CmpSorter, K, Ps...>(num, seed);
+    return passed;
+  }
 }
 
 template <typename K, typename... Ps>
 bool testSequential(std::size_t num, uint seed = time(NULL)) {
   bool passed = true;
-  passed &= testAllDistributions<true, BitSorterSequential,
+  passed &= testAllDistributions<false, true, BitSorterSequential,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
-  passed &= testAllDistributions<false, BitSorterSequential,
+  passed &= testAllDistributions<false, false, BitSorterSequential,
+                                 CmpSorterInsertionSort, K, Ps...>(num, seed);
+  passed &= testAllDistributions<true, true, BitSorterSequential,
+                                 CmpSorterInsertionSort, K, Ps...>(num, seed);
+  passed &= testAllDistributions<true, false, BitSorterSequential,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
   return passed;
 }
@@ -98,13 +120,21 @@ bool testSequential(std::size_t num, uint seed = time(NULL)) {
 template <typename K, typename... Ps>
 bool testSIMD(std::size_t num, uint seed = time(NULL)) {
   bool passed = true;
-  passed &= testAllDistributions<true, BitSorterSIMD<false>,
+  passed &= testAllDistributions<false, true, BitSorterSIMD<false>,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
-  passed &= testAllDistributions<false, BitSorterSIMD<false>,
+  passed &= testAllDistributions<false, false, BitSorterSIMD<false>,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
-  passed &= testAllDistributions<true, BitSorterSIMD<true>,
+  passed &= testAllDistributions<false, true, BitSorterSIMD<true>,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
-  passed &= testAllDistributions<false, BitSorterSIMD<true>,
+  passed &= testAllDistributions<false, false, BitSorterSIMD<true>,
+                                 CmpSorterInsertionSort, K, Ps...>(num, seed);
+  passed &= testAllDistributions<true, true, BitSorterSIMD<false>,
+                                 CmpSorterInsertionSort, K, Ps...>(num, seed);
+  passed &= testAllDistributions<true, false, BitSorterSIMD<false>,
+                                 CmpSorterInsertionSort, K, Ps...>(num, seed);
+  passed &= testAllDistributions<true, true, BitSorterSIMD<true>,
+                                 CmpSorterInsertionSort, K, Ps...>(num, seed);
+  passed &= testAllDistributions<true, false, BitSorterSIMD<true>,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
 
   if constexpr ((sizeof...(Ps) == 0 ||
@@ -132,7 +162,6 @@ int main(int argc, char const *argv[]) {
     seed = std::stoi(argv[2]);
   }
   bool passed = true;
-#if 1
   for (std::size_t num = 1; num <= maxNum; num *= 10) {
     std::cout << "Testing " << num << " elements" << std::endl;
     passed &= testSequential<uint8_t, uint32_t>(num, seed);
@@ -187,7 +216,6 @@ int main(int argc, char const *argv[]) {
     passed &= testSIMD<double, uint64_t>(num, seed);
     passed &= testSIMD<double, uint64_t, uint8_t>(num, seed);
   }
-#endif
 
   if (passed) {
     std::cout << "All tests passed" << std::endl;
