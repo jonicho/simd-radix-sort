@@ -2258,8 +2258,15 @@ inline void SmallSort16V(double* __restrict__ ptr, const size_t length){
     const int nbVecs = (length+nbValuesInVec-1)/nbValuesInVec;
     const int rest = nbVecs*nbValuesInVec-length;
     const int lastVecSize = nbValuesInVec-rest;
+    // 30. Nov 2023 (Jonas Keller):
+    // changed to use std::bit_cast instead of reinterpret_cast to avoid
+    // warnings about strict aliasing (requires C++20 now)
+    /*
     const double temp_DBL_MAX = DBL_MAX;
     const long int double_max = reinterpret_cast<const long int&>(temp_DBL_MAX);
+    */
+    const long int double_max = std::bit_cast<long int>(DBL_MAX);
+
     switch(nbVecs){
     case 1:
     {
