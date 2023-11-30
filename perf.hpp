@@ -420,7 +420,10 @@ double measureTimePerElementThreshWithRepsAndWarmup(
 template <typename SortMethod, InputDistribution Distribution, typename K,
           typename... Ps>
 void perfTestThresh() {
-  system(("mkdir -p " + dataDir).c_str());
+  if (system(("mkdir -p " + dataDir).c_str()) != 0) {
+    std::cout << "ERROR: Could not create directory " << dataDir << std::endl;
+    exit(-1);
+  }
   std::string perfDescription = std::string("cmpThresh-") + type_name<K>;
   ((perfDescription += std::string("-") + type_name<Ps>), ...);
   perfDescription += std::string("-") + SortMethod::name() + "-" +
@@ -515,7 +518,10 @@ template <typename SortMethod, typename SortMethodRelTo,
           std::size_t Payloads, std::size_t PayloadFactor = 1>
 static void perfTestSpeedupAllKP() {
   const std::size_t num = 1 << 18;
-  system(("mkdir -p " + dataDir).c_str());
+  if (system(("mkdir -p " + dataDir).c_str()) != 0) {
+    std::cout << "ERROR: Could not create directory " << dataDir << std::endl;
+    exit(-1);
+  }
   std::string perfDescription = std::string() + "relTo" +
                                 SortMethodRelTo::name() + "-" +
                                 SortMethod::name() + "-";
@@ -623,7 +629,10 @@ template <typename... SortMethods> struct PerfTest {
 
   template <InputDistribution Distribution, typename K, typename... Ps>
   static void perfTestNum() {
-    system(("mkdir -p " + dataDir).c_str());
+    if (system(("mkdir -p " + dataDir).c_str()) != 0) {
+      std::cout << "ERROR: Could not create directory " << dataDir << std::endl;
+      exit(-1);
+    }
     std::string perfDescription = std::string("tpe-") + type_name<K>;
     ((perfDescription += std::string("-") + type_name<Ps>), ...);
     perfDescription +=
@@ -671,7 +680,10 @@ template <typename... SortMethods> struct PerfTest {
   template <InputDistribution Distribution, typename K, typename... Ps>
   static void perfTest() {
     const std::size_t num = 1 << 18;
-    system(("mkdir -p " + dataDir).c_str());
+    if (system(("mkdir -p " + dataDir).c_str()) != 0) {
+      std::cout << "ERROR: Could not create directory " << dataDir << std::endl;
+      exit(-1);
+    }
     std::string perfDescription = std::string() + type_name<K>;
     ((perfDescription += std::string("-") + type_name<Ps>), ...);
     perfDescription += std::string("-") +
