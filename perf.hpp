@@ -33,7 +33,13 @@
 
 #include "radixSort.hpp"
 
-const std::string dataDir = "/tmp/radixSortData";
+#ifdef __clang__
+const std::string dataDir = "/tmp/radixSortData-clang";
+#elif __GNUC__
+const std::string dataDir = "/tmp/radixSortData-gcc";
+#elif
+#error "Unknown compiler"
+#endif
 
 template <int Bytes> struct _UInt;
 template <> struct _UInt<1> {
