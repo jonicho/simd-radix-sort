@@ -28,12 +28,22 @@
 const std::string dataDir = "/tmp/radixSortData";
 
 template <int Bytes> struct _UInt;
-template <> struct _UInt<1> { using type = uint8_t; };
-template <> struct _UInt<2> { using type = uint16_t; };
-template <> struct _UInt<4> { using type = uint32_t; };
-template <> struct _UInt<8> { using type = uint64_t; };
+template <> struct _UInt<1> {
+  using type = uint8_t;
+};
+template <> struct _UInt<2> {
+  using type = uint16_t;
+};
+template <> struct _UInt<4> {
+  using type = uint32_t;
+};
+template <> struct _UInt<8> {
+  using type = uint64_t;
+};
 #ifdef _SIMD_RADIX_SORT_GENERIC_H_
-template <> struct _UInt<16> { using type = radix::uint128_t; };
+template <> struct _UInt<16> {
+  using type = radix::uint128_t;
+};
 #endif // _SIMD_RADIX_SORT_GENERIC_H_
 
 template <int Bytes> using UInt = typename _UInt<Bytes>::type;

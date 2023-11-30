@@ -98,11 +98,21 @@ template <int Bytes> struct LargeUInt {
 };
 
 template <int Bytes> struct _UInt;
-template <> struct _UInt<1> { using type = uint8_t; };
-template <> struct _UInt<2> { using type = uint16_t; };
-template <> struct _UInt<4> { using type = uint32_t; };
-template <> struct _UInt<8> { using type = uint64_t; };
-template <int Bytes> struct _UInt { using type = LargeUInt<Bytes>; };
+template <> struct _UInt<1> {
+  using type = uint8_t;
+};
+template <> struct _UInt<2> {
+  using type = uint16_t;
+};
+template <> struct _UInt<4> {
+  using type = uint32_t;
+};
+template <> struct _UInt<8> {
+  using type = uint64_t;
+};
+template <int Bytes> struct _UInt {
+  using type = LargeUInt<Bytes>;
+};
 
 template <int Bytes> using UInt = typename _UInt<Bytes>::type;
 
@@ -124,10 +134,18 @@ namespace simd {
 template <typename T, int Bytes, typename = void> struct _MMRegType {
   static_assert(always_false_v<T>, "Unsupported type or number of bytes");
 };
-template <typename T> struct _MMRegType<T, 64> { using type = __m512i; };
-template <typename T> struct _MMRegType<T, 32> { using type = __m256i; };
-template <typename T> struct _MMRegType<T, 16> { using type = __m128i; };
-template <typename T> struct _MMRegType<T, 8> { using type = __m128i; };
+template <typename T> struct _MMRegType<T, 64> {
+  using type = __m512i;
+};
+template <typename T> struct _MMRegType<T, 32> {
+  using type = __m256i;
+};
+template <typename T> struct _MMRegType<T, 16> {
+  using type = __m128i;
+};
+template <typename T> struct _MMRegType<T, 8> {
+  using type = __m128i;
+};
 
 template <typename T, int Bytes>
 using MMRegType = typename _MMRegType<T, Bytes>::type;
@@ -164,13 +182,27 @@ struct Vec<T, Bytes, std::enable_if_t<(Bytes > 64) && is_power_of_two<Bytes>>> {
 template <int Size> struct _MaskType {
   static_assert(always_false_v<_MaskType<Size>>, "Unsupported mask size");
 };
-template <> struct _MaskType<64> { using type = __mmask64; };
-template <> struct _MaskType<32> { using type = __mmask32; };
-template <> struct _MaskType<16> { using type = __mmask16; };
-template <> struct _MaskType<8> { using type = __mmask8; };
-template <> struct _MaskType<4> { using type = __mmask8; };
-template <> struct _MaskType<2> { using type = __mmask8; };
-template <> struct _MaskType<1> { using type = __mmask8; };
+template <> struct _MaskType<64> {
+  using type = __mmask64;
+};
+template <> struct _MaskType<32> {
+  using type = __mmask32;
+};
+template <> struct _MaskType<16> {
+  using type = __mmask16;
+};
+template <> struct _MaskType<8> {
+  using type = __mmask8;
+};
+template <> struct _MaskType<4> {
+  using type = __mmask8;
+};
+template <> struct _MaskType<2> {
+  using type = __mmask8;
+};
+template <> struct _MaskType<1> {
+  using type = __mmask8;
+};
 
 template <int Size> using MaskType = typename _MaskType<Size>::type;
 
@@ -615,7 +647,9 @@ INLINE bool isBitSet(int bitNo, DataElement<K, Ps...> val) {
   return (valAsUInt >> bitNo) & 1;
 }
 
-template <typename T> struct _KeyType { using type = T; };
+template <typename T> struct _KeyType {
+  using type = T;
+};
 template <typename K, typename... Ps> struct _KeyType<DataElement<K, Ps...>> {
   using type = K;
 };
@@ -751,9 +785,8 @@ template <bool OneReg = false> struct BitSorterSIMD {
   }
 
   template <typename K, typename... Ps>
-  static constexpr SortIndex
-      numElemsPerVec = OneReg ? 64 / std::max({sizeof(K), sizeof(Ps)...})
-                              : 64 / sizeof(K);
+  static constexpr SortIndex numElemsPerVec =
+      OneReg ? 64 / std::max({sizeof(K), sizeof(Ps)...}) : 64 / sizeof(K);
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
