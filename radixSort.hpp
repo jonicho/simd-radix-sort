@@ -51,6 +51,7 @@
 #ifdef __AVX512F__
 
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <immintrin.h>
@@ -80,7 +81,7 @@ template <typename K> struct DataElement<K> {
   bool operator>(const DataElement &other) const { return key > other.key; }
 };
 
-template <int Bytes> struct LargeUInt {
+template <std::size_t Bytes> struct LargeUInt {
   static_assert(Bytes > 8, "Bytes must be larger than 8");
   static_assert((Bytes & (Bytes - 1)) == 0, "Bytes must be a power of 2");
   uint64_t data[Bytes / 8];
@@ -91,13 +92,13 @@ template <int Bytes> struct LargeUInt {
 
   LargeUInt(uint64_t x) {
     data[0] = x;
-    for (int i = 1; i < Bytes / 8; i++) {
+    for (std::size_t i = 1; i < Bytes / 8; i++) {
       data[i] = 0;
     }
   }
 };
 
-template <int Bytes> struct _UInt;
+template <std::size_t Bytes> struct _UInt;
 template <> struct _UInt<1> {
   using type = uint8_t;
 };
@@ -110,13 +111,13 @@ template <> struct _UInt<4> {
 template <> struct _UInt<8> {
   using type = uint64_t;
 };
-template <int Bytes> struct _UInt {
+template <std::size_t Bytes> struct _UInt {
   using type = LargeUInt<Bytes>;
 };
 
-template <int Bytes> using UInt = typename _UInt<Bytes>::type;
+template <std::size_t Bytes> using UInt = typename _UInt<Bytes>::type;
 
-template <int Bytes> UInt<Bytes> setBit(int n) {
+template <std::size_t Bytes> UInt<Bytes> setBit(std::size_t n) {
   if constexpr (Bytes <= 8) {
     return UInt<Bytes>(1ULL << n);
   } else {
@@ -131,7 +132,7 @@ namespace simd {
 // the T-SIMD library written by Prof. Dr.-Ing. Ralf Möller:
 // https://www.ti.uni-bielefeld.de/html/people/moeller/tsimd_warpingsimd.html
 
-template <typename T, int Bytes, typename = void> struct _MMRegType {
+template <typename T, std::size_t Bytes, typename = void> struct _MMRegType {
   static_assert(always_false_v<T>, "Unsupported type or number of bytes");
 };
 template <typename T> struct _MMRegType<T, 64> {
@@ -147,19 +148,19 @@ template <typename T> struct _MMRegType<T, 8> {
   using type = __m128i;
 };
 
-template <typename T, int Bytes>
+template <typename T, std::size_t Bytes>
 using MMRegType = typename _MMRegType<T, Bytes>::type;
 
-template <int X>
+template <std::size_t X>
 static constexpr bool is_power_of_two = X > 0 && (X & (X - 1)) == 0;
 
-template <typename T, int Bytes = 64, typename = void> struct Vec;
+template <typename T, std::size_t Bytes = 64, typename = void> struct Vec;
 
-template <typename T, int Bytes>
+template <typename T, std::size_t Bytes>
 struct Vec<T, Bytes,
            std::enable_if_t<(Bytes <= 64) && is_power_of_two<Bytes>>> {
   MMRegType<T, Bytes> mmReg;
-  static constexpr int numElems = Bytes / sizeof(T);
+  static constexpr std::size_t numElems = Bytes / sizeof(T);
   Vec() = default;
   Vec(const MMRegType<T, Bytes> x) : mmReg(x) {}
   Vec &operator=(const MMRegType<T, Bytes> x) {
@@ -169,17 +170,17 @@ struct Vec<T, Bytes,
   operator MMRegType<T, Bytes>() const { return mmReg; }
 };
 
-template <typename T, int Bytes>
+template <typename T, std::size_t Bytes>
 struct Vec<T, Bytes, std::enable_if_t<(Bytes > 64) && is_power_of_two<Bytes>>> {
   MMRegType<T, 64> mmReg[Bytes / 64];
-  static constexpr int numElems = Bytes / sizeof(T);
-  static constexpr int numRegs = Bytes / 64;
+  static constexpr std::size_t numElems = Bytes / sizeof(T);
+  static constexpr std::size_t numRegs = Bytes / 64;
   Vec() = default;
-  MMRegType<T, 64> &operator[](int i) { return mmReg[i]; }
-  const MMRegType<T, 64> &operator[](int i) const { return mmReg[i]; }
+  MMRegType<T, 64> &operator[](std::size_t i) { return mmReg[i]; }
+  const MMRegType<T, 64> &operator[](std::size_t i) const { return mmReg[i]; }
 };
 
-template <int Size> struct _MaskType {
+template <std::size_t Size> struct _MaskType {
   static_assert(always_false_v<_MaskType<Size>>, "Unsupported mask size");
 };
 template <> struct _MaskType<64> {
@@ -204,9 +205,9 @@ template <> struct _MaskType<1> {
   using type = __mmask8;
 };
 
-template <int Size> using MaskType = typename _MaskType<Size>::type;
+template <std::size_t Size> using MaskType = typename _MaskType<Size>::type;
 
-template <int Size> struct Mask {
+template <std::size_t Size> struct Mask {
   MaskType<Size> k;
   Mask() = default;
   Mask(const MaskType<Size> &x) : k(x) {}
@@ -217,13 +218,13 @@ template <int Size> struct Mask {
   operator MaskType<Size>() const { return k; }
 };
 
-template <typename Tdst, typename Tsrc, int Bytes>
+template <typename Tdst, typename Tsrc, std::size_t Bytes>
 static INLINE Vec<Tdst, Bytes> reinterpret(const Vec<Tsrc, Bytes> &vec) {
   return reinterpret_cast<const Vec<Tdst, Bytes> &>(vec);
 }
 
-template <typename T, int Bytes = 64>
-static INLINE Vec<T, Bytes> set_bit(const int bitNo) {
+template <typename T, std::size_t Bytes = 64>
+static INLINE Vec<T, Bytes> set_bit(const std::size_t bitNo) {
   if constexpr (Bytes == 64) {
     if constexpr (sizeof(T) == 1) {
       return _mm512_set1_epi8(uint8_t(1) << bitNo);
@@ -287,7 +288,7 @@ static INLINE Vec<T, Bytes> set_bit(const int bitNo) {
   }
 }
 
-template <int Bytes = 64, typename T>
+template <std::size_t Bytes = 64, typename T>
 static INLINE Vec<T, Bytes> loadu(const T *p) {
   if constexpr (Bytes == 64) {
     return _mm512_loadu_si512(p);
@@ -305,7 +306,7 @@ static INLINE Vec<T, Bytes> loadu(const T *p) {
 #endif // __AVX512BW__ && __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Vec<T, Bytes> result;
-    for (int i = 0; i < Vec<T, Bytes>::numRegs; i++) {
+    for (std::size_t i = 0; i < Vec<T, Bytes>::numRegs; i++) {
       result[i] = _mm512_loadu_si512(p + i * Vec<T, 64>::numElems);
     }
     return result;
@@ -314,7 +315,7 @@ static INLINE Vec<T, Bytes> loadu(const T *p) {
   }
 }
 
-template <int Bytes = 64, typename T>
+template <std::size_t Bytes = 64, typename T>
 static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
                                         const T *p) {
   if constexpr (Bytes == 64) {
@@ -376,7 +377,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Vec<T, Bytes> result;
     Mask<Vec<T, Bytes>::numElems> mask = m;
-    for (int i = 0; i < Vec<T, Bytes>::numRegs; i++) {
+    for (std::size_t i = 0; i < Vec<T, Bytes>::numRegs; i++) {
 #ifdef __AVX512BW__
       if constexpr (sizeof(T) == 1) {
         result[i] = _mm512_maskz_loadu_epi8(mask, p + i * Vec<T, 64>::numElems);
@@ -402,7 +403,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
   }
 }
 
-template <typename T, int Bytes>
+template <typename T, std::size_t Bytes>
 static INLINE void mask_compressstoreu(T *p,
                                        const Mask<Vec<T, Bytes>::numElems> m,
                                        const Vec<T, Bytes> v) {
@@ -464,7 +465,7 @@ static INLINE void mask_compressstoreu(T *p,
 #endif // __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Mask<Vec<T, Bytes>::numElems> mask = m;
-    for (int i = 0; i < Vec<T, Bytes>::numRegs; i++) {
+    for (std::size_t i = 0; i < Vec<T, Bytes>::numRegs; i++) {
       if constexpr (sizeof(T) == 2) {
         _mm512_mask_compressstoreu_epi16(p, mask, v[i]);
       } else if constexpr (sizeof(T) == 4) {
@@ -482,9 +483,9 @@ static INLINE void mask_compressstoreu(T *p,
   }
 }
 
-template <typename T, int Bytes>
+template <typename T, std::size_t Bytes>
 static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
-                                                     const int bitNo) {
+                                                     const std::size_t bitNo) {
   if constexpr (Bytes == 64) {
 #ifdef __AVX512BW__
     if constexpr (sizeof(T) == 1) {
@@ -566,7 +567,8 @@ static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
   }
 }
 
-template <int Size> static INLINE int kpopcnt(const Mask<Size> m) {
+template <std::size_t Size>
+static INLINE std::size_t kpopcnt(const Mask<Size> m) {
   if constexpr (Size < 8) {
     return _mm_popcnt_u64(m) / (8 / Size);
   } else {
@@ -574,7 +576,7 @@ template <int Size> static INLINE int kpopcnt(const Mask<Size> m) {
   }
 }
 
-template <int Size> static INLINE Mask<Size> knot(const Mask<Size> m) {
+template <std::size_t Size> static INLINE Mask<Size> knot(const Mask<Size> m) {
 #ifdef __AVX512DQ__
   if constexpr (Size <= 8) {
     return _knot_mask8(m);
@@ -593,7 +595,7 @@ template <int Size> static INLINE Mask<Size> knot(const Mask<Size> m) {
     }
 }
 
-template <int Size>
+template <std::size_t Size>
 static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
 #ifdef __AVX512DQ__
   if constexpr (Size <= 8) {
@@ -613,8 +615,8 @@ static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
     }
 }
 
-template <int Size>
-static INLINE Mask<Size> kshiftr(const Mask<Size> m, const int n) {
+template <std::size_t Size>
+static INLINE Mask<Size> kshiftr(const Mask<Size> m, const std::size_t n) {
   if constexpr (Size <= 8) {
     return m >> (n * (8 / Size));
   } else {
@@ -622,8 +624,8 @@ static INLINE Mask<Size> kshiftr(const Mask<Size> m, const int n) {
   }
 }
 
-template <int Size>
-static INLINE Mask<Size> kshiftl(const Mask<Size> m, const int n) {
+template <std::size_t Size>
+static INLINE Mask<Size> kshiftl(const Mask<Size> m, const std::size_t n) {
   if constexpr (Size <= 8) {
     return m << (n * (8 / Size));
   } else {
@@ -634,14 +636,15 @@ static INLINE Mask<Size> kshiftl(const Mask<Size> m, const int n) {
 
 using SortIndex = ssize_t;
 
-template <typename T> INLINE bool isBitSet(int bitNo, T val) {
+template <typename T>
+INLINE bool isBitSet(const std::size_t bitNo, const T val) {
   UInt<sizeof(T)> valAsUInt;
   memcpy(&valAsUInt, &val, sizeof(T));
   return (valAsUInt >> bitNo) & 1;
 }
 
 template <typename K, typename... Ps>
-INLINE bool isBitSet(int bitNo, DataElement<K, Ps...> val) {
+INLINE bool isBitSet(const std::size_t bitNo, const DataElement<K, Ps...> val) {
   UInt<sizeof(K)> valAsUInt;
   memcpy(&valAsUInt, &val.key, sizeof(K));
   return (valAsUInt >> bitNo) & 1;
@@ -742,8 +745,8 @@ struct BitSorterSequential {
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE SortIndex sortBit(int bitNo, SortIndex left, SortIndex right,
-                                  K *keys, Ps *...payloads) {
+  static INLINE SortIndex sortBit(std::size_t bitNo, SortIndex left,
+                                  SortIndex right, K *keys, Ps *...payloads) {
     SortIndex l = left;
     SortIndex r = right;
     while (l <= r) {
@@ -769,8 +772,8 @@ struct BitSorterNoSort {
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE SortIndex sortBit(int bitNo, SortIndex left, SortIndex right,
-                                  K *keys, Ps *...payloads) {
+  static INLINE SortIndex sortBit(std::size_t bitNo, SortIndex left,
+                                  SortIndex right, K *keys, Ps *...payloads) {
     return (left + right) / 2;
   }
 };
@@ -790,8 +793,8 @@ template <bool OneReg = false> struct BitSorterSIMD {
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE SortIndex sortBit(int bitNo, SortIndex left, SortIndex right,
-                                  K *keys, Ps *...payloads) {
+  static INLINE SortIndex sortBit(std::size_t bitNo, SortIndex left,
+                                  SortIndex right, K *keys, Ps *...payloads) {
     static constexpr SortIndex _numElemsPerVec = numElemsPerVec<K, Ps...>;
 
     SortIndex numElems = right - left + 1;
@@ -894,7 +897,7 @@ private:
   static INLINE std::tuple<simd::Mask<numElemsPerVec<K, Ps...>>,
                            simd::Mask<numElemsPerVec<K, Ps...>>>
   getSortMasks(simd::Vec<K, numElemsPerVec<K, Ps...> * sizeof(K)> keyVec,
-               int bitNo) {
+               std::size_t bitNo) {
     if constexpr (bitDirUp<K, Up, IsHighestBit, IsRightSide>()) {
       auto sortMaskRight = simd::test_bit(keyVec, bitNo);
       auto sortMaskLeft = simd::knot(sortMaskRight);
@@ -938,8 +941,8 @@ private:
 template <bool Up, typename BitSorter, typename CmpSorter,
           bool IsRightSide = false, bool IsHighestBit = true, typename K,
           typename... Ps>
-void radixRecursion(int bitNo, SortIndex cmpSortThreshold, SortIndex left,
-                    SortIndex right, K *keys, Ps *...payloads) {
+void radixRecursion(std::size_t bitNo, SortIndex cmpSortThreshold,
+                    SortIndex left, SortIndex right, K *keys, Ps *...payloads) {
   if (right - left <= 0) {
     return;
   }

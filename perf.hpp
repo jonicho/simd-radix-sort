@@ -41,7 +41,7 @@ const std::string dataDir = "/tmp/radixSortData-gcc";
 #error "Unknown compiler"
 #endif
 
-template <int Bytes> struct _UInt;
+template <std::size_t Bytes> struct _UInt;
 template <> struct _UInt<1> {
   using type = uint8_t;
 };
@@ -60,7 +60,7 @@ template <> struct _UInt<16> {
 };
 #endif // _SIMD_RADIX_SORT_GENERIC_H_
 
-template <int Bytes> using UInt = typename _UInt<Bytes>::type;
+template <std::size_t Bytes> using UInt = typename _UInt<Bytes>::type;
 
 template <typename BitSorter, typename CmpSorter, bool Combined = false>
 struct SortMethodRadixSort {
@@ -430,7 +430,7 @@ void perfTestThresh() {
   file << std::setprecision(6);
   std::cout << "Performing perf test for " << perfDescription << " ..."
             << std::endl;
-  const int num = 1 << 18;
+  const std::size_t num = 1 << 18;
 
   file << "cmpThresh"
        << " " << num << std::endl;
@@ -471,7 +471,7 @@ void perfTestThresh() {
 }
 
 template <typename SortMethod, typename SortMethodRelTo,
-          InputDistribution Distribution, int Payloads, typename K,
+          InputDistribution Distribution, std::size_t Payloads, typename K,
           typename... Ps>
 static std::string perfTestSpeedup(const size_t num) {
   std::string result = "";
@@ -511,8 +511,8 @@ static std::string perfTestSpeedup(const size_t num) {
 }
 
 template <typename SortMethod, typename SortMethodRelTo,
-          InputDistribution Distribution, bool WithoutPayload, int Payloads,
-          int PayloadFactor = 1>
+          InputDistribution Distribution, bool WithoutPayload,
+          std::size_t Payloads, std::size_t PayloadFactor = 1>
 static void perfTestSpeedupAllKP() {
   const std::size_t num = 1 << 18;
   system(("mkdir -p " + dataDir).c_str());
@@ -604,7 +604,7 @@ static void perfTestSpeedupAllKP() {
 }
 
 template <typename SortMethod, typename SortMethodRelTo,
-          InputDistribution Distribution, int Payloads = 0>
+          InputDistribution Distribution, std::size_t Payloads = 0>
 static void perfTestSpeedupAll() {
   perfTestSpeedupAllKP<SortMethod, SortMethodRelTo, Distribution, true,
                        Payloads, 0>();
