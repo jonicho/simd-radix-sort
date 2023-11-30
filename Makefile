@@ -1,6 +1,6 @@
 BUILD_DIR ?= ./build
 
-CPPFLAGS ?= -MMD -MP -Wall -std=c++17 -O3 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi2
+CPPFLAGS ?= -MMD -MP -Wall -std=c++20 -O3 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi2
 
 CXX=g++
 

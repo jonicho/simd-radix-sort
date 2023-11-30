@@ -2,6 +2,8 @@
 
 Code for the bachelor's thesis "SIMD Implementation of MSB Radix Sort with Separate Key and Payload Datastreams" at the Bielefeld University.
 
+Requires C++20.
+
 ## Header-only library
 
 The file `radixSort.hpp` provides a generic AVX-512 implementation of MSB Radix Sort for sorting datasets with a key and an arbitrary number of payloads as a header-only library.
