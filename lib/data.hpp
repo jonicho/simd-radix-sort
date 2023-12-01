@@ -3,6 +3,8 @@
 
 #include "../radixSort.hpp"
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <bitset>
 #include <cassert>
 #include <cmath>
@@ -20,13 +22,11 @@
 using radixSort::DataElement;
 
 template <typename T> T getRandom() {
-  uint32_t randomInts[std::max<int>(sizeof(T) / sizeof(uint32_t), 1)];
-  for (std::size_t i = 0; i < sizeof(randomInts) / sizeof(uint32_t); i++) {
-    randomInts[i] = rand();
+  std::array<uint8_t, sizeof(T)> randomBytes;
+  for (std::size_t i = 0; i < sizeof(T); i++) {
+    randomBytes[i] = rand();
   }
-  T result;
-  memcpy(&result, randomInts, sizeof(T));
-  return result;
+  return std::bit_cast<T>(randomBytes);
 }
 
 enum class InputDistribution {

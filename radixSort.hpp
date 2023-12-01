@@ -50,6 +50,7 @@
 
 #ifdef __AVX512F__
 
+#include <bit>
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
@@ -638,16 +639,12 @@ using SortIndex = ssize_t;
 
 template <typename T>
 INLINE bool isBitSet(const std::size_t bitNo, const T val) {
-  UInt<sizeof(T)> valAsUInt;
-  memcpy(&valAsUInt, &val, sizeof(T));
-  return (valAsUInt >> bitNo) & 1;
+  return (std::bit_cast<UInt<sizeof(T)>>(val) >> bitNo) & 1;
 }
 
 template <typename K, typename... Ps>
 INLINE bool isBitSet(const std::size_t bitNo, const DataElement<K, Ps...> val) {
-  UInt<sizeof(K)> valAsUInt;
-  memcpy(&valAsUInt, &val.key, sizeof(K));
-  return (valAsUInt >> bitNo) & 1;
+  return isBitSet(bitNo, val.key);
 }
 
 template <typename T> struct _KeyType {
