@@ -31,6 +31,7 @@
 #include <cfloat>
 #include <algorithm>
 #include <cassert>
+#include <bit> // 01. Dec 2023 (Jonas Keller): for std::bit_cast below
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -2258,7 +2259,7 @@ inline void SmallSort16V(double* __restrict__ ptr, const size_t length){
     const int nbVecs = (length+nbValuesInVec-1)/nbValuesInVec;
     const int rest = nbVecs*nbValuesInVec-length;
     const int lastVecSize = nbValuesInVec-rest;
-    // 30. Nov 2023 (Jonas Keller):
+    // 01. Dec 2023 (Jonas Keller):
     // changed to use std::bit_cast instead of reinterpret_cast to avoid
     // warnings about strict aliasing (requires C++20 now)
     /*
