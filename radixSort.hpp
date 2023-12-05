@@ -659,22 +659,14 @@ template <typename T> using KeyType = typename _KeyType<T>::type;
 template <typename T, bool Up, bool IsHighestBit, bool IsRightSide>
 constexpr bool bitDirUp() {
   using K = KeyType<T>;
-  if constexpr (std::__is_unsigned_integer<K>::value) {
-    return Up;
-  }
-  if constexpr (std::__is_signed_integer<K>::value) {
-    if constexpr (IsHighestBit) {
-      return !Up;
-    } else {
+  if constexpr (std::is_integral_v<K>) {
+    if constexpr (std::is_unsigned_v<K>) {
       return Up;
-    }
-  }
-  if constexpr (std::is_floating_point<K>::value) {
-    if constexpr (IsHighestBit) {
-      return !Up;
     } else {
-      return IsRightSide;
+      return IsHighestBit ? !Up : Up;
     }
+  } else if constexpr (std::is_floating_point_v<K>) {
+    return IsHighestBit ? !Up : IsRightSide;
   }
   return Up;
 }
@@ -707,7 +699,7 @@ struct CmpSorterBramasSmallSort {
   template <bool Up, typename K, typename... Ps>
   static INLINE void sort(SortIndex left, SortIndex right, K *keys,
                           Ps *...payloads) {
-    static_assert(std::__is_one_of<K, double, int>::value,
+    static_assert(std::is_same_v<K, double> || std::is_same_v<K, int>,
                   "BramasSmallSort only supports int and double");
     static_assert(Up, "BramasSmallSort only supports sorting up");
 
