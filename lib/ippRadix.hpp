@@ -152,7 +152,8 @@ inline void sortDesc(double *pSrcDst, int len) {
   delete[] pBuffer;
 }
 
-template <bool Up = true, typename K> inline void sort(K *pSrcDst, int len) {
+template <bool Up = true, typename K>
+inline void sort(K *pSrcDst, int len) {
   if constexpr (Up) {
     sortAsc(pSrcDst, len);
   } else {
@@ -160,8 +161,8 @@ template <bool Up = true, typename K> inline void sort(K *pSrcDst, int len) {
   }
 }
 
-} // namespace ippRadix
+}  // namespace ippRadix
 
-#endif // _IPP_RADIX_IS_PRESENT_
+#endif  // _IPP_RADIX_IS_PRESENT_
 
-#endif // _IPP_RADIX_H_
+#endif  // _IPP_RADIX_H_

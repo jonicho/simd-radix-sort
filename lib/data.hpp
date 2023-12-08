@@ -1,7 +1,6 @@
 #ifndef _DATA_H_
 #define _DATA_H_
 
-#include "../radixSort.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -19,9 +18,12 @@
 #include <tuple>
 #include <type_traits>
 
+#include "../radixSort.hpp"
+
 using radixSort::DataElement;
 
-template <typename T> T getRandom() {
+template <typename T>
+T getRandom() {
   std::array<uint8_t, sizeof(T)> randomBytes;
   for (std::size_t i = 0; i < sizeof(T); i++) {
     randomBytes[i] = rand();
@@ -63,7 +65,8 @@ constexpr const char *inputDistributionToString() {
   }
 }
 
-template <typename K, typename... Ps> struct Data {
+template <typename K, typename... Ps>
+struct Data {
   K *keys;
   std::tuple<Ps *...> payloads;
   std::size_t num;
@@ -74,64 +77,64 @@ template <typename K, typename... Ps> struct Data {
     payloads = std::make_tuple(new Ps[num]...);
     std::mt19937 gen(seed);
     switch (distribution) {
-    case InputDistribution::Zero: {
-      for (std::size_t i = 0; i < num; i++) {
-        keys[i] = 0;
-      }
-    } break;
-    case InputDistribution::ZeroOne: {
-      for (std::size_t i = 0; i < num; i++) {
-        keys[i] = K(gen() % 2);
-      }
-    } break;
-    case InputDistribution::Uniform: {
-      fillKeysUniform(gen);
-    } break;
-    case InputDistribution::Gaussian: {
-      fillKeysGaussian(gen);
-    } break;
-    case InputDistribution::Sorted: {
-      if constexpr (std::is_integral_v<K>) {
+      case InputDistribution::Zero: {
+        for (std::size_t i = 0; i < num; i++) {
+          keys[i] = 0;
+        }
+      } break;
+      case InputDistribution::ZeroOne: {
+        for (std::size_t i = 0; i < num; i++) {
+          keys[i] = K(gen() % 2);
+        }
+      } break;
+      case InputDistribution::Uniform: {
         fillKeysUniform(gen);
-      } else {
+      } break;
+      case InputDistribution::Gaussian: {
         fillKeysGaussian(gen);
-      }
-      std::sort(keys, keys + num);
-    } break;
-    case InputDistribution::ReverseSorted: {
-      if constexpr (std::is_integral_v<K>) {
-        fillKeysUniform(gen);
-      } else {
-        fillKeysGaussian(gen);
-      }
-      std::sort(keys, keys + num, std::greater<K>());
-    } break;
-    case InputDistribution::AlmostSorted: {
-      if constexpr (std::is_integral_v<K>) {
-        fillKeysUniform(gen);
-      } else {
-        fillKeysGaussian(gen);
-      }
-      std::sort(keys, keys + num);
-      std::size_t numberOfDisplacements = std::exp2(std::log10(num));
-      std::uniform_int_distribution<std::size_t> dist(0, num - 1);
-      for (std::size_t i = 0; i < numberOfDisplacements; i++) {
-        std::swap(keys[dist(gen)], keys[dist(gen)]);
-      }
-    } break;
-    case InputDistribution::AlmostReverseSorted: {
-      if constexpr (std::is_integral_v<K>) {
-        fillKeysUniform(gen);
-      } else {
-        fillKeysGaussian(gen);
-      }
-      std::sort(keys, keys + num, std::greater<K>());
-      std::size_t numberOfDisplacements = std::exp2(std::log10(num));
-      std::uniform_int_distribution<std::size_t> dist(0, num - 1);
-      for (std::size_t i = 0; i < numberOfDisplacements; i++) {
-        std::swap(keys[dist(gen)], keys[dist(gen)]);
-      }
-    } break;
+      } break;
+      case InputDistribution::Sorted: {
+        if constexpr (std::is_integral_v<K>) {
+          fillKeysUniform(gen);
+        } else {
+          fillKeysGaussian(gen);
+        }
+        std::sort(keys, keys + num);
+      } break;
+      case InputDistribution::ReverseSorted: {
+        if constexpr (std::is_integral_v<K>) {
+          fillKeysUniform(gen);
+        } else {
+          fillKeysGaussian(gen);
+        }
+        std::sort(keys, keys + num, std::greater<K>());
+      } break;
+      case InputDistribution::AlmostSorted: {
+        if constexpr (std::is_integral_v<K>) {
+          fillKeysUniform(gen);
+        } else {
+          fillKeysGaussian(gen);
+        }
+        std::sort(keys, keys + num);
+        std::size_t numberOfDisplacements = std::exp2(std::log10(num));
+        std::uniform_int_distribution<std::size_t> dist(0, num - 1);
+        for (std::size_t i = 0; i < numberOfDisplacements; i++) {
+          std::swap(keys[dist(gen)], keys[dist(gen)]);
+        }
+      } break;
+      case InputDistribution::AlmostReverseSorted: {
+        if constexpr (std::is_integral_v<K>) {
+          fillKeysUniform(gen);
+        } else {
+          fillKeysGaussian(gen);
+        }
+        std::sort(keys, keys + num, std::greater<K>());
+        std::size_t numberOfDisplacements = std::exp2(std::log10(num));
+        std::uniform_int_distribution<std::size_t> dist(0, num - 1);
+        for (std::size_t i = 0; i < numberOfDisplacements; i++) {
+          std::swap(keys[dist(gen)], keys[dist(gen)]);
+        }
+      } break;
     }
     makePayloads();
   }
@@ -320,7 +323,7 @@ template <typename K, typename... Ps> struct Data {
     }
   }
 
-private:
+ private:
   void fillKeysUniform(std::mt19937 &gen) {
     if constexpr (std::is_integral_v<K>) {
       std::uniform_int_distribution<K> dist(std::numeric_limits<K>::lowest(),
@@ -366,4 +369,4 @@ private:
   }
 };
 
-#endif // _DATA_H_
+#endif  // _DATA_H_

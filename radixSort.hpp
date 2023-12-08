@@ -50,24 +50,35 @@
 
 #ifdef __AVX512F__
 
+#include <immintrin.h>
+#include <popcntintrin.h>
+#include <x86intrin.h>
+
 #include <bit>
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <immintrin.h>
 #include <limits>
-#include <popcntintrin.h>
 #include <tuple>
 #include <type_traits>
-#include <x86intrin.h>
+
+#if __has_include("bramas/sort512.hpp")
+#include "bramas/sort512.hpp"
+#endif
+
+#if __has_include("bramas/sort512kv.hpp")
+#include "bramas/sort512kv.hpp"
+#endif
 
 #define INLINE inline __attribute__((always_inline))
-template <typename> inline constexpr bool always_false_v = false;
+template <typename>
+inline constexpr bool always_false_v = false;
 
 namespace radixSort {
 
-template <typename K, typename... Ps> struct DataElement {
+template <typename K, typename... Ps>
+struct DataElement {
   K key;
   std::tuple<Ps...> payloads;
   bool operator<(const DataElement &other) const { return key < other.key; }
@@ -76,13 +87,15 @@ template <typename K, typename... Ps> struct DataElement {
 
 // specialization of DataElement for no payloads, because an empty
 // tuple still uses one byte of space, we don't want that
-template <typename K> struct DataElement<K> {
+template <typename K>
+struct DataElement<K> {
   K key;
   bool operator<(const DataElement &other) const { return key < other.key; }
   bool operator>(const DataElement &other) const { return key > other.key; }
 };
 
-template <std::size_t Bytes> struct LargeUInt {
+template <std::size_t Bytes>
+struct LargeUInt {
   static_assert(Bytes > 8, "Bytes must be larger than 8");
   static_assert((Bytes & (Bytes - 1)) == 0, "Bytes must be a power of 2");
   uint64_t data[Bytes / 8];
@@ -99,26 +112,34 @@ template <std::size_t Bytes> struct LargeUInt {
   }
 };
 
-template <std::size_t Bytes> struct _UInt;
-template <> struct _UInt<1> {
+template <std::size_t Bytes>
+struct _UInt;
+template <>
+struct _UInt<1> {
   using type = uint8_t;
 };
-template <> struct _UInt<2> {
+template <>
+struct _UInt<2> {
   using type = uint16_t;
 };
-template <> struct _UInt<4> {
+template <>
+struct _UInt<4> {
   using type = uint32_t;
 };
-template <> struct _UInt<8> {
+template <>
+struct _UInt<8> {
   using type = uint64_t;
 };
-template <std::size_t Bytes> struct _UInt {
+template <std::size_t Bytes>
+struct _UInt {
   using type = LargeUInt<Bytes>;
 };
 
-template <std::size_t Bytes> using UInt = typename _UInt<Bytes>::type;
+template <std::size_t Bytes>
+using UInt = typename _UInt<Bytes>::type;
 
-template <std::size_t Bytes> UInt<Bytes> setBit(std::size_t n) {
+template <std::size_t Bytes>
+UInt<Bytes> setBit(std::size_t n) {
   if constexpr (Bytes <= 8) {
     return UInt<Bytes>(1ULL << n);
   } else {
@@ -133,19 +154,24 @@ namespace simd {
 // the T-SIMD library written by Prof. Dr.-Ing. Ralf Möller:
 // https://www.ti.uni-bielefeld.de/html/people/moeller/tsimd_warpingsimd.html
 
-template <typename T, std::size_t Bytes, typename = void> struct _MMRegType {
+template <typename T, std::size_t Bytes, typename = void>
+struct _MMRegType {
   static_assert(always_false_v<T>, "Unsupported type or number of bytes");
 };
-template <typename T> struct _MMRegType<T, 64> {
+template <typename T>
+struct _MMRegType<T, 64> {
   using type = __m512i;
 };
-template <typename T> struct _MMRegType<T, 32> {
+template <typename T>
+struct _MMRegType<T, 32> {
   using type = __m256i;
 };
-template <typename T> struct _MMRegType<T, 16> {
+template <typename T>
+struct _MMRegType<T, 16> {
   using type = __m128i;
 };
-template <typename T> struct _MMRegType<T, 8> {
+template <typename T>
+struct _MMRegType<T, 8> {
   using type = __m128i;
 };
 
@@ -155,7 +181,8 @@ using MMRegType = typename _MMRegType<T, Bytes>::type;
 template <std::size_t X>
 static constexpr bool is_power_of_two = X > 0 && (X & (X - 1)) == 0;
 
-template <typename T, std::size_t Bytes = 64, typename = void> struct Vec;
+template <typename T, std::size_t Bytes = 64, typename = void>
+struct Vec;
 
 template <typename T, std::size_t Bytes>
 struct Vec<T, Bytes,
@@ -181,34 +208,44 @@ struct Vec<T, Bytes, std::enable_if_t<(Bytes > 64) && is_power_of_two<Bytes>>> {
   const MMRegType<T, 64> &operator[](std::size_t i) const { return mmReg[i]; }
 };
 
-template <std::size_t Size> struct _MaskType {
+template <std::size_t Size>
+struct _MaskType {
   static_assert(always_false_v<_MaskType<Size>>, "Unsupported mask size");
 };
-template <> struct _MaskType<64> {
+template <>
+struct _MaskType<64> {
   using type = __mmask64;
 };
-template <> struct _MaskType<32> {
+template <>
+struct _MaskType<32> {
   using type = __mmask32;
 };
-template <> struct _MaskType<16> {
+template <>
+struct _MaskType<16> {
   using type = __mmask16;
 };
-template <> struct _MaskType<8> {
+template <>
+struct _MaskType<8> {
   using type = __mmask8;
 };
-template <> struct _MaskType<4> {
+template <>
+struct _MaskType<4> {
   using type = __mmask8;
 };
-template <> struct _MaskType<2> {
+template <>
+struct _MaskType<2> {
   using type = __mmask8;
 };
-template <> struct _MaskType<1> {
+template <>
+struct _MaskType<1> {
   using type = __mmask8;
 };
 
-template <std::size_t Size> using MaskType = typename _MaskType<Size>::type;
+template <std::size_t Size>
+using MaskType = typename _MaskType<Size>::type;
 
-template <std::size_t Size> struct Mask {
+template <std::size_t Size>
+struct Mask {
   MaskType<Size> k;
   Mask() = default;
   Mask(const MaskType<Size> &x) : k(x) {}
@@ -263,7 +300,7 @@ static INLINE Vec<T, Bytes> set_bit(const std::size_t bitNo) {
     } else if constexpr (sizeof(T) == 32) {
       return _mm256_maskz_set1_epi64(0b0001 << (bitNo / 64),
                                      uint64_t(1) << (bitNo % 64));
-#endif // __AVX512VL__
+#endif  // __AVX512VL__
     } else {
       static_assert(always_false_v<T>, "Unsupported type size");
     }
@@ -280,7 +317,7 @@ static INLINE Vec<T, Bytes> set_bit(const std::size_t bitNo) {
     } else if constexpr (sizeof(T) == 16) {
       return _mm_maskz_set1_epi64(0b01 << (bitNo / 64), uint64_t(1)
                                                             << (bitNo % 64));
-#endif // __AVX512VL__
+#endif  // __AVX512VL__
     } else {
       static_assert(always_false_v<T>, "Unsupported type size");
     }
@@ -304,7 +341,7 @@ static INLINE Vec<T, Bytes> loadu(const T *p) {
     } else {
       static_assert(always_false_v<T>, "Unsupported type size");
     }
-#endif // __AVX512BW__ && __AVX512VL__
+#endif  // __AVX512BW__ && __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Vec<T, Bytes> result;
     for (std::size_t i = 0; i < Vec<T, Bytes>::numRegs; i++) {
@@ -326,7 +363,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
     } else if constexpr (sizeof(T) == 2) {
       return _mm512_maskz_loadu_epi16(m, p);
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
       if constexpr (sizeof(T) == 4) {
         return _mm512_maskz_loadu_epi32(m, p);
       } else if constexpr (sizeof(T) <= 64) {
@@ -342,7 +379,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
     } else if constexpr (sizeof(T) == 2) {
       return _mm256_maskz_loadu_epi16(m, (__m256i_u *)p);
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
       if constexpr (sizeof(T) == 4) {
         return _mm256_maskz_loadu_epi32(m, (__m256i_u *)p);
       } else if constexpr (sizeof(T) <= 32) {
@@ -357,7 +394,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
     } else if constexpr (sizeof(T) == 2) {
       return _mm_maskz_loadu_epi16(m, p);
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
       if constexpr (sizeof(T) == 4) {
         return _mm_maskz_loadu_epi32(m, p);
       } else if constexpr (sizeof(T) <= 16) {
@@ -370,11 +407,11 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
     if constexpr (sizeof(T) == 1) {
       return _mm_maskz_loadu_epi8(m & 0xff, p);
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
     {
       static_assert(always_false_v<T>, "Unsupported type size");
     }
-#endif // __AVX512VL__
+#endif  // __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Vec<T, Bytes> result;
     Mask<Vec<T, Bytes>::numElems> mask = m;
@@ -386,7 +423,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
         result[i] =
             _mm512_maskz_loadu_epi16(mask, p + i * Vec<T, 64>::numElems);
       } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
         if constexpr (sizeof(T) == 4) {
           result[i] =
               _mm512_maskz_loadu_epi32(mask, p + i * Vec<T, 64>::numElems);
@@ -415,7 +452,7 @@ static INLINE void mask_compressstoreu(T *p,
     } else if constexpr (sizeof(T) == 2) {
       _mm512_mask_compressstoreu_epi16(p, m, v);
     } else
-#endif // __AVX512VBMI2__
+#endif  // __AVX512VBMI2__
       if constexpr (sizeof(T) == 4) {
         _mm512_mask_compressstoreu_epi32(p, m, v);
       } else if constexpr (sizeof(T) <= 64) {
@@ -431,7 +468,7 @@ static INLINE void mask_compressstoreu(T *p,
     } else if constexpr (sizeof(T) == 2) {
       _mm256_mask_compressstoreu_epi16(p, m, v);
     } else
-#endif // __AVX512VBMI2__
+#endif  // __AVX512VBMI2__
       if constexpr (sizeof(T) == 4) {
         _mm256_mask_compressstoreu_epi32(p, m, v);
       } else if constexpr (sizeof(T) <= 32) {
@@ -446,7 +483,7 @@ static INLINE void mask_compressstoreu(T *p,
     } else if constexpr (sizeof(T) == 2) {
       _mm_mask_compressstoreu_epi16(p, m, v);
     } else
-#endif // __AVX512VBMI2__
+#endif  // __AVX512VBMI2__
       if constexpr (sizeof(T) == 4) {
         _mm_mask_compressstoreu_epi32(p, m, v);
       } else if constexpr (sizeof(T) <= 16) {
@@ -459,11 +496,11 @@ static INLINE void mask_compressstoreu(T *p,
     if constexpr (sizeof(T) == 1) {
       _mm_mask_compressstoreu_epi8(p, m & 0xff, v);
     } else
-#endif // __AVX512VBMI2__
+#endif  // __AVX512VBMI2__
     {
       static_assert(always_false_v<T>, "Unsupported type size");
     }
-#endif // __AVX512VL__
+#endif  // __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Mask<Vec<T, Bytes>::numElems> mask = m;
     for (std::size_t i = 0; i < Vec<T, Bytes>::numRegs; i++) {
@@ -494,7 +531,7 @@ static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
     } else if constexpr (sizeof(T) == 2) {
       return _mm512_test_epi16_mask(v, set_bit<T, Bytes>(bitNo));
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
       if constexpr (sizeof(T) == 4) {
         return _mm512_test_epi32_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 8) {
@@ -539,7 +576,7 @@ static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
     } else if constexpr (sizeof(T) == 2) {
       return _mm256_test_epi16_mask(v, set_bit<T, Bytes>(bitNo));
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
       if constexpr (sizeof(T) == 4) {
         return _mm256_test_epi32_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 8) {
@@ -554,7 +591,7 @@ static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
     } else if constexpr (sizeof(T) == 2) {
       return _mm_test_epi16_mask(v, set_bit<T, Bytes>(bitNo));
     } else
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
       if constexpr (sizeof(T) == 4) {
         return _mm_test_epi32_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 8) {
@@ -562,7 +599,7 @@ static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
       } else {
         static_assert(always_false_v<T>, "Unsupported type size");
       }
-#endif // __AVX512VL__
+#endif  // __AVX512VL__
   } else {
     static_assert(always_false_v<T>, "Unsupported vector size");
   }
@@ -577,12 +614,13 @@ static INLINE std::size_t kpopcnt(const Mask<Size> m) {
   }
 }
 
-template <std::size_t Size> static INLINE Mask<Size> knot(const Mask<Size> m) {
+template <std::size_t Size>
+static INLINE Mask<Size> knot(const Mask<Size> m) {
 #ifdef __AVX512DQ__
   if constexpr (Size <= 8) {
     return _knot_mask8(m);
   } else
-#endif // __AVX512DQ__
+#endif  // __AVX512DQ__
     if constexpr (Size == 16) {
       return _knot_mask16(m);
 #ifdef __AVX512BW__
@@ -590,7 +628,7 @@ template <std::size_t Size> static INLINE Mask<Size> knot(const Mask<Size> m) {
       return _knot_mask32(m);
     } else if constexpr (Size == 64) {
       return _knot_mask64(m);
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
     } else {
       static_assert(always_false_v<Mask<Size>>, "Unsupported mask size");
     }
@@ -602,7 +640,7 @@ static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
   if constexpr (Size <= 8) {
     return _kand_mask8(m1, m2);
   } else
-#endif // __AVX512DQ__
+#endif  // __AVX512DQ__
     if constexpr (Size == 16) {
       return _kand_mask16(m1, m2);
 #ifdef __AVX512BW__
@@ -610,7 +648,7 @@ static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
       return _kand_mask32(m1, m2);
     } else if constexpr (Size == 64) {
       return _kand_mask64(m1, m2);
-#endif // __AVX512BW__
+#endif  // __AVX512BW__
     } else {
       static_assert(always_false_v<Mask<Size>>, "Unsupported mask size");
     }
@@ -633,7 +671,7 @@ static INLINE Mask<Size> kshiftl(const Mask<Size> m, const std::size_t n) {
     return m << n;
   }
 }
-} // namespace simd
+}  // namespace simd
 
 using SortIndex = ssize_t;
 
@@ -647,14 +685,17 @@ INLINE bool isBitSet(const std::size_t bitNo, const DataElement<K, Ps...> val) {
   return isBitSet(bitNo, val.key);
 }
 
-template <typename T> struct _KeyType {
+template <typename T>
+struct _KeyType {
   using type = T;
 };
-template <typename K, typename... Ps> struct _KeyType<DataElement<K, Ps...>> {
+template <typename K, typename... Ps>
+struct _KeyType<DataElement<K, Ps...>> {
   using type = K;
 };
 
-template <typename T> using KeyType = typename _KeyType<T>::type;
+template <typename T>
+using KeyType = typename _KeyType<T>::type;
 
 template <typename T, bool Up, bool IsHighestBit, bool IsRightSide>
 constexpr bool bitDirUp() {
@@ -717,7 +758,7 @@ struct CmpSorterBramasSmallSort {
     }
   }
 };
-#endif // defined(SORT512_HPP) && defined(SORT512KV_HPP)
+#endif  // defined(SORT512_HPP) && defined(SORT512KV_HPP)
 
 struct CmpSorterNoSort {
   static std::string name() { return "CmpSorterNoSort"; }
@@ -767,7 +808,8 @@ struct BitSorterNoSort {
   }
 };
 
-template <bool OneReg = false> struct BitSorterSIMD {
+template <bool OneReg = false>
+struct BitSorterSIMD {
   static std::string name() {
     if constexpr (OneReg) {
       return "BitSorterSIMD<OneReg>";
@@ -880,7 +922,7 @@ template <bool OneReg = false> struct BitSorterSIMD {
     return writePosLeft;
   }
 
-private:
+ private:
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
   static INLINE std::tuple<simd::Mask<numElemsPerVec<K, Ps...>>,
@@ -907,7 +949,6 @@ private:
       std::tuple<simd::Vec<Ps, numElemsPerVec<K, Ps...> * sizeof(Ps)>...>
           payloadVec,
       K *keys, Ps *...payloads) {
-
     simd::mask_compressstoreu(&keys[leftPos], leftMask, keyVec);
     std::apply(
         [&](auto... payloadVecs) {
@@ -964,7 +1005,7 @@ void sort(SortIndex cmpSortThreshold, SortIndex num, K *keys, Ps *...payloads) {
     cmpSortThreshold =
         std::min(cmpSortThreshold, (SortIndex)(16 * 64 / sizeof(K)));
   }
-#endif // SORT512_HPP && SORT512KV_HPP
+#endif  // SORT512_HPP && SORT512KV_HPP
   radixRecursion<Up, BitSorter, CmpSorter>(sizeof(K) * 8 - 1, cmpSortThreshold,
                                            0, num - 1, keys, payloads...);
 }
@@ -982,7 +1023,7 @@ void sort(SortIndex cmpSortThreshold, SortIndex num,
     cmpSortThreshold =
         std::min(cmpSortThreshold, (SortIndex)(16 * 64 / sizeof(K)));
   }
-#endif // SORT512_HPP && SORT512KV_HPP
+#endif  // SORT512_HPP && SORT512KV_HPP
   // static_assert(sizeof(K) >= (sizeof(Ps) + ...), "Sum of payload sizes must
   // be smaller than or equal to key size");
   radixRecursion<Up, BitSorter, CmpSorter>(sizeof(K) * 8 - 1, cmpSortThreshold,
@@ -994,8 +1035,8 @@ void sort(SortIndex num, K *keys, Ps *...payloads) {
   sort<Up, BitSorterSIMD<>, CmpSorterInsertionSort>(16, num, keys, payloads...);
 }
 
-} // namespace radixSort
+}  // namespace radixSort
 
-#endif // __AVX512F__
+#endif  // __AVX512F__
 
-#endif // _RADIX_SORT_H_
+#endif  // _RADIX_SORT_H_

@@ -1,17 +1,15 @@
-#include "perf.hpp"
-
 #include <cstdint>
 #include <functional>
 #include <iomanip>
 #include <iostream>
 
 #include "lib/data.hpp"
+#include "perf.hpp"
+#include "radixSort.hpp"
 
 #if __has_include("moeller/SIMDRadixSortGeneric.H")
 #include "moeller/SIMDRadixSortGeneric.H"
-#endif // __has_include("moeller/SIMDRadixSortGeneric.H")
-
-#include "radixSort.hpp"
+#endif  // __has_include("moeller/SIMDRadixSortGeneric.H")
 
 int main(int argc, char const *argv[]) {
   std::cout << std::fixed;
@@ -19,7 +17,7 @@ int main(int argc, char const *argv[]) {
 #ifdef _IPP_RADIX_IS_PRESENT_
   std::cout << "Initializing IPP..." << std::endl;
   ippRadix::ippInit();
-#endif // _IPP_RADIX_IS_PRESENT_
+#endif  // _IPP_RADIX_IS_PRESENT_
   using AllSorts =
       PerfTest<SortMethodRadixSort<radixSort::BitSorterSequential,
                                    radixSort::CmpSorterInsertionSort>,
@@ -33,10 +31,10 @@ int main(int argc, char const *argv[]) {
                                    radixSort::CmpSorterNoSort>,
 #ifdef _SIMD_RADIX_SORT_GENERIC_H_
                SortMethodMoellerSeq, SortMethodMoellerCompress,
-#endif // _SIMD_RADIX_SORT_GENERIC_H_
+#endif  // _SIMD_RADIX_SORT_GENERIC_H_
 #ifdef _IPP_RADIX_IS_PRESENT_
                SortMethodIPPRadix,
-#endif // _IPP_RADIX_IS_PRESENT_
+#endif  // _IPP_RADIX_IS_PRESENT_
                SortMethodSTLSort, SortMethodBramas, SortMethodBlacher>;
   using OnlyRadixSIMDNoCmp =
       PerfTest<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
@@ -144,7 +142,7 @@ int main(int argc, char const *argv[]) {
                                              radixSort::CmpSorterInsertionSort>,
                          SortMethodMoellerCompress,
                          InputDistribution::AlmostReverseSorted>,
-#endif // _SIMD_RADIX_SORT_GENERIC_H_
+#endif  // _SIMD_RADIX_SORT_GENERIC_H_
 
       perfTestSpeedupAllKP<
           SortMethodRadixSort<radixSort::BitSorterSIMD<true>,

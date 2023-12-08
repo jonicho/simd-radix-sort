@@ -8,6 +8,7 @@
 #endif
 #include <x86intrin.h>
 #pragma GCC diagnostic pop
+#include <time.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -17,7 +18,6 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
-#include <time.h>
 #include <tuple>
 
 #include "blacher/avx2sort.h"
@@ -26,12 +26,11 @@
 #include "lib/data.hpp"
 #include "lib/ippRadix.hpp"
 #include "lib/type_name.hpp"
+#include "radixSort.hpp"
 
 #if __has_include("moeller/SIMDRadixSortGeneric.H")
 #include "moeller/SIMDRadixSortGeneric.H"
-#endif // __has_include("moeller/SIMDRadixSortGeneric.H")
-
-#include "radixSort.hpp"
+#endif  // __has_include("moeller/SIMDRadixSortGeneric.H")
 
 #ifdef __clang__
 const std::string dataDir = "/tmp/radixSortData-clang";
@@ -41,26 +40,33 @@ const std::string dataDir = "/tmp/radixSortData-gcc";
 #error "Unknown compiler"
 #endif
 
-template <std::size_t Bytes> struct _UInt;
-template <> struct _UInt<1> {
+template <std::size_t Bytes>
+struct _UInt;
+template <>
+struct _UInt<1> {
   using type = uint8_t;
 };
-template <> struct _UInt<2> {
+template <>
+struct _UInt<2> {
   using type = uint16_t;
 };
-template <> struct _UInt<4> {
+template <>
+struct _UInt<4> {
   using type = uint32_t;
 };
-template <> struct _UInt<8> {
+template <>
+struct _UInt<8> {
   using type = uint64_t;
 };
 #ifdef _SIMD_RADIX_SORT_GENERIC_H_
-template <> struct _UInt<16> {
+template <>
+struct _UInt<16> {
   using type = radix::uint128_t;
 };
-#endif // _SIMD_RADIX_SORT_GENERIC_H_
+#endif  // _SIMD_RADIX_SORT_GENERIC_H_
 
-template <std::size_t Bytes> using UInt = typename _UInt<Bytes>::type;
+template <std::size_t Bytes>
+using UInt = typename _UInt<Bytes>::type;
 
 template <typename BitSorter, typename CmpSorter, bool Combined = false>
 struct SortMethodRadixSort {
@@ -90,7 +96,8 @@ struct SortMethodRadixSort {
   static constexpr bool areKeyAndPayloadSeparate = !Combined;
   static constexpr bool hasThreshold = true;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     if constexpr (Combined && sizeof...(Ps) != 0) {
       return false;
     }
@@ -142,7 +149,8 @@ struct SortMethodMoellerCompress {
   static constexpr bool areKeyAndPayloadSeparate = false;
   static constexpr bool hasThreshold = true;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     if constexpr (sizeof...(Ps) > 1) {
       return false;
     }
@@ -173,7 +181,8 @@ struct SortMethodMoellerSeq {
   static constexpr bool areKeyAndPayloadSeparate = false;
   static constexpr bool hasThreshold = true;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     if constexpr (sizeof...(Ps) > 1) {
       return false;
     }
@@ -198,14 +207,15 @@ struct SortMethodMoellerSeq {
         cmpSortThresh);
   }
 };
-#endif // _SIMD_RADIX_SORT_GENERIC_H_
+#endif  // _SIMD_RADIX_SORT_GENERIC_H_
 
 struct SortMethodSTLSort {
   static std::string name() { return "STLSort"; }
   static constexpr bool areKeyAndPayloadSeparate = false;
   static constexpr bool hasThreshold = false;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     return true;
   }
 
@@ -223,7 +233,8 @@ struct SortMethodIPPRadix {
   static constexpr bool areKeyAndPayloadSeparate = false;
   static constexpr bool hasThreshold = false;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     return sizeof...(Ps) == 0 && !std::is_same_v<K, int8_t>;
   }
 
@@ -235,14 +246,15 @@ struct SortMethodIPPRadix {
     ippRadix::sort((K *)keysAndPayloads, num);
   }
 };
-#endif // _IPP_RADIX_IS_PRESENT_
+#endif  // _IPP_RADIX_IS_PRESENT_
 
 struct SortMethodBramas {
   static std::string name() { return "BramasSort"; }
   static constexpr bool areKeyAndPayloadSeparate = true;
   static constexpr bool hasThreshold = false;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     if constexpr (sizeof...(Ps) == 0) {
       return std::is_same_v<K, int> || std::is_same_v<K, double>;
     }
@@ -276,7 +288,8 @@ struct SortMethodBlacher {
   static constexpr bool areKeyAndPayloadSeparate = true;
   static constexpr bool hasThreshold = false;
 
-  template <typename K, typename... Ps> static constexpr bool isSupported() {
+  template <typename K, typename... Ps>
+  static constexpr bool isSupported() {
     return sizeof...(Ps) == 0 && std::is_same_v<K, int32_t>;
   }
 
@@ -624,7 +637,8 @@ static void perfTestSpeedupAll() {
                        Payloads, 8>();
 }
 
-template <typename... SortMethods> struct PerfTest {
+template <typename... SortMethods>
+struct PerfTest {
   static_assert(sizeof...(SortMethods) > 0, "No sort methods provided");
 
   template <InputDistribution Distribution, typename K, typename... Ps>
@@ -735,4 +749,4 @@ template <typename... SortMethods> struct PerfTest {
   }
 };
 
-#endif // _PERF_H
+#endif  // _PERF_H
