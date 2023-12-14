@@ -70,6 +70,10 @@ struct CmpSorterNoSort {
   static inline void sort(SortIndex left, SortIndex right, K *keys,
                           Ps *...payloads) {
     // do nothing
+    (void)left;
+    (void)right;
+    (void)keys;
+    ((void)payloads, ...);
   }
 };
 }  // namespace simd_sort

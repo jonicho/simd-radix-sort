@@ -264,7 +264,7 @@ struct SortMethodBlacher {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, K *keys, Ps *...payloads) {
+  static void sort(SortIndex num, K *keys, Ps *...) {
     static_assert(sizeof...(Ps) == 0 && std::is_same_v<K, int32_t>,
                   "SortMethodBlacher only supports int32_t key and no payload");
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");

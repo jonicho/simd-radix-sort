@@ -14,7 +14,7 @@
 
 using namespace simd_sort;
 
-int main(int argc, char const *argv[]) {
+int main() {
   std::cout << std::fixed;
   std::cout << std::setprecision(6);
 #ifdef IPP_RADIX_IS_PRESENT_

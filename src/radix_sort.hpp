@@ -145,6 +145,9 @@ struct BitSorterNoSort {
             typename... Ps>
   static inline SortIndex sortBit(std::size_t bitNo, SortIndex left,
                                   SortIndex right, K *keys, Ps *...payloads) {
+    (void)bitNo;
+    (void)keys;
+    ((void)payloads, ...);
     return (left + right) / 2;
   }
 };
