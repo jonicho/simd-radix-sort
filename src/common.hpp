@@ -8,8 +8,6 @@
 
 namespace simd_sort {
 
-#define INLINE inline __attribute__((always_inline))
-
 template <typename>
 inline constexpr bool always_false_v = false;
 

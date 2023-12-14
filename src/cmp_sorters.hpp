@@ -19,7 +19,7 @@ struct CmpSorterInsertionSort {
   static std::string name() { return "CmpSorterInsertionSort"; }
 
   template <bool Up, typename K, typename... Ps>
-  static INLINE void sort(SortIndex left, SortIndex right, K *keys,
+  static inline void sort(SortIndex left, SortIndex right, K *keys,
                           Ps *...payloads) {
     for (SortIndex i = left + 1; i <= right; i++) {
       K key = keys[i];
@@ -41,7 +41,7 @@ struct CmpSorterBramasSmallSort {
   static std::string name() { return "CmpSorterBramasSmallSort"; }
 
   template <bool Up, typename K, typename... Ps>
-  static INLINE void sort(SortIndex left, SortIndex right, K *keys,
+  static inline void sort(SortIndex left, SortIndex right, K *keys,
                           Ps *...payloads) {
     static_assert(std::is_same_v<K, double> || std::is_same_v<K, int>,
                   "BramasSmallSort only supports int and double");
@@ -67,7 +67,7 @@ struct CmpSorterNoSort {
   static std::string name() { return "CmpSorterNoSort"; }
 
   template <bool Up, typename K, typename... Ps>
-  static INLINE void sort(SortIndex left, SortIndex right, K *keys,
+  static inline void sort(SortIndex left, SortIndex right, K *keys,
                           Ps *...payloads) {
     // do nothing
   }

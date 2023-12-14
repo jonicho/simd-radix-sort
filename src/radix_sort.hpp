@@ -72,12 +72,13 @@
 namespace simd_sort::radix_sort {
 
 template <typename T>
-INLINE bool isBitSet(const std::size_t bitNo, const T val) {
+static inline bool isBitSet(const std::size_t bitNo, const T val) {
   return (std::bit_cast<UInt<sizeof(T)>>(val) >> bitNo) & 1;
 }
 
 template <typename K, typename... Ps>
-INLINE bool isBitSet(const std::size_t bitNo, const DataElement<K, Ps...> val) {
+static inline bool isBitSet(const std::size_t bitNo,
+                            const DataElement<K, Ps...> val) {
   return isBitSet(bitNo, val.key);
 }
 
@@ -115,7 +116,7 @@ struct BitSorterSequential {
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE SortIndex sortBit(std::size_t bitNo, SortIndex left,
+  static inline SortIndex sortBit(std::size_t bitNo, SortIndex left,
                                   SortIndex right, K *keys, Ps *...payloads) {
     SortIndex l = left;
     SortIndex r = right;
@@ -142,7 +143,7 @@ struct BitSorterNoSort {
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE SortIndex sortBit(std::size_t bitNo, SortIndex left,
+  static inline SortIndex sortBit(std::size_t bitNo, SortIndex left,
                                   SortIndex right, K *keys, Ps *...payloads) {
     return (left + right) / 2;
   }
@@ -164,7 +165,7 @@ struct BitSorterSIMD {
 
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE SortIndex sortBit(std::size_t bitNo, SortIndex left,
+  static inline SortIndex sortBit(std::size_t bitNo, SortIndex left,
                                   SortIndex right, K *keys, Ps *...payloads) {
     static constexpr SortIndex _numElemsPerVec = numElemsPerVec<K, Ps...>;
 
@@ -265,7 +266,7 @@ struct BitSorterSIMD {
  private:
   template <bool Up, bool IsHighestBit, bool IsRightSide, typename K,
             typename... Ps>
-  static INLINE std::tuple<simd::Mask<numElemsPerVec<K, Ps...>>,
+  static inline std::tuple<simd::Mask<numElemsPerVec<K, Ps...>>,
                            simd::Mask<numElemsPerVec<K, Ps...>>>
   getSortMasks(simd::Vec<K, numElemsPerVec<K, Ps...> * sizeof(K)> keyVec,
                std::size_t bitNo) {
@@ -281,7 +282,7 @@ struct BitSorterSIMD {
   }
 
   template <typename K, typename... Ps>
-  static INLINE void compress_store_left_right(
+  static inline void compress_store_left_right(
       SortIndex leftPos, SortIndex rightPos,
       simd::Mask<numElemsPerVec<K, Ps...>> leftMask,
       simd::Mask<numElemsPerVec<K, Ps...>> rightMask,

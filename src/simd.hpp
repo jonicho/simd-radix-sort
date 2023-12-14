@@ -117,12 +117,12 @@ struct Mask {
 };
 
 template <typename Tdst, typename Tsrc, std::size_t Bytes>
-static INLINE Vec<Tdst, Bytes> reinterpret(const Vec<Tsrc, Bytes> &vec) {
+static inline Vec<Tdst, Bytes> reinterpret(const Vec<Tsrc, Bytes> &vec) {
   return reinterpret_cast<const Vec<Tdst, Bytes> &>(vec);
 }
 
 template <typename T, std::size_t Bytes = 64>
-static INLINE Vec<T, Bytes> set_bit(const std::size_t bitNo) {
+static inline Vec<T, Bytes> set_bit(const std::size_t bitNo) {
   if constexpr (Bytes == 64) {
     if constexpr (sizeof(T) == 1) {
       return _mm512_set1_epi8(uint8_t(1) << bitNo);
@@ -187,7 +187,7 @@ static INLINE Vec<T, Bytes> set_bit(const std::size_t bitNo) {
 }
 
 template <std::size_t Bytes = 64, typename T>
-static INLINE Vec<T, Bytes> loadu(const T *p) {
+static inline Vec<T, Bytes> loadu(const T *p) {
   if constexpr (Bytes == 64) {
     return _mm512_loadu_si512(p);
   } else if constexpr (Bytes == 32) {
@@ -214,7 +214,7 @@ static INLINE Vec<T, Bytes> loadu(const T *p) {
 }
 
 template <std::size_t Bytes = 64, typename T>
-static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
+static inline Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
                                         const T *p) {
   if constexpr (Bytes == 64) {
 #ifdef __AVX512BW__
@@ -302,7 +302,7 @@ static INLINE Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
 }
 
 template <typename T, std::size_t Bytes>
-static INLINE void mask_compressstoreu(T *p,
+static inline void mask_compressstoreu(T *p,
                                        const Mask<Vec<T, Bytes>::numElems> m,
                                        const Vec<T, Bytes> v) {
   if constexpr (Bytes == 64) {
@@ -382,7 +382,7 @@ static INLINE void mask_compressstoreu(T *p,
 }
 
 template <typename T, std::size_t Bytes>
-static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
+static inline Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
                                                      const std::size_t bitNo) {
   if constexpr (Bytes == 64) {
 #ifdef __AVX512BW__
@@ -466,7 +466,7 @@ static INLINE Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
 }
 
 template <std::size_t Size>
-static INLINE std::size_t kpopcnt(const Mask<Size> m) {
+static inline std::size_t kpopcnt(const Mask<Size> m) {
   if constexpr (Size < 8) {
     return _mm_popcnt_u64(m) / (8 / Size);
   } else {
@@ -475,7 +475,7 @@ static INLINE std::size_t kpopcnt(const Mask<Size> m) {
 }
 
 template <std::size_t Size>
-static INLINE Mask<Size> knot(const Mask<Size> m) {
+static inline Mask<Size> knot(const Mask<Size> m) {
 #ifdef __AVX512DQ__
   if constexpr (Size <= 8) {
     return _knot_mask8(m);
@@ -495,7 +495,7 @@ static INLINE Mask<Size> knot(const Mask<Size> m) {
 }
 
 template <std::size_t Size>
-static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
+static inline Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
 #ifdef __AVX512DQ__
   if constexpr (Size <= 8) {
     return _kand_mask8(m1, m2);
@@ -515,7 +515,7 @@ static INLINE Mask<Size> kand(const Mask<Size> m1, const Mask<Size> m2) {
 }
 
 template <std::size_t Size>
-static INLINE Mask<Size> kshiftr(const Mask<Size> m, const std::size_t n) {
+static inline Mask<Size> kshiftr(const Mask<Size> m, const std::size_t n) {
   if constexpr (Size <= 8) {
     return m >> (n * (8 / Size));
   } else {
@@ -524,7 +524,7 @@ static INLINE Mask<Size> kshiftr(const Mask<Size> m, const std::size_t n) {
 }
 
 template <std::size_t Size>
-static INLINE Mask<Size> kshiftl(const Mask<Size> m, const std::size_t n) {
+static inline Mask<Size> kshiftl(const Mask<Size> m, const std::size_t n) {
   if constexpr (Size <= 8) {
     return m << (n * (8 / Size));
   } else {
