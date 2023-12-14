@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -5,21 +7,21 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
-#include <typeinfo>
+#include <utility>
 
-#include "bramas/sort512.hpp"
-#include "bramas/sort512kv.hpp"
-#include "lib/data.hpp"
-#include "lib/type_name.hpp"
-#include "radixSort.hpp"
+#include "cmp_sorters.hpp"
+#include "common.hpp"
+#include "data.hpp"
+#include "radix_sort.hpp"
 
-using namespace radixSort;
+using namespace simd_sort;
+using namespace simd_sort::radix_sort;
 
 template <bool Combined, bool Up, InputDistribution Distribution,
           typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
-bool test(std::size_t num, uint seed = time(NULL)) {
+bool test(std::size_t num, unsigned int seed = time(NULL)) {
   std::cout << "Testing: K: " << type_name<K> << ", ";
   if constexpr (sizeof...(Ps) > 0) {
     std::cout << "Ps: ";
@@ -75,9 +77,8 @@ bool test(std::size_t num, uint seed = time(NULL)) {
 template <bool Combined, bool Up, typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
-bool testAllDistributions(std::size_t num, uint seed = time(NULL)) {
-  if constexpr (Combined &&
-                !simd::is_power_of_two<sizeof(DataElement<K, Ps...>)>) {
+bool testAllDistributions(std::size_t num, unsigned int seed = time(NULL)) {
+  if constexpr (Combined && !is_power_of_two<sizeof(DataElement<K, Ps...>)>) {
     return true;
   } else {
     bool passed = true;
@@ -102,7 +103,7 @@ bool testAllDistributions(std::size_t num, uint seed = time(NULL)) {
 }
 
 template <typename K, typename... Ps>
-bool testSequential(std::size_t num, uint seed = time(NULL)) {
+bool testSequential(std::size_t num, unsigned int seed = time(NULL)) {
   bool passed = true;
   passed &= testAllDistributions<false, true, BitSorterSequential,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
@@ -116,7 +117,7 @@ bool testSequential(std::size_t num, uint seed = time(NULL)) {
 }
 
 template <typename K, typename... Ps>
-bool testSIMD(std::size_t num, uint seed = time(NULL)) {
+bool testSIMD(std::size_t num, unsigned int seed = time(NULL)) {
   bool passed = true;
   passed &= testAllDistributions<false, true, BitSorterSIMD<false>,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
@@ -155,7 +156,7 @@ int main(int argc, char const *argv[]) {
   if (argc > 1) {
     maxNum = std::stoi(argv[1]);
   }
-  uint seed = time(NULL);
+  unsigned int seed = time(NULL);
   if (argc > 2) {
     seed = std::stoi(argv[2]);
   }

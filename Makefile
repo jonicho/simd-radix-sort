@@ -1,10 +1,10 @@
 BUILD_DIR ?= ./build
 
-CPPFLAGS ?= -MMD -MP -Wall -std=c++20 -O3 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi2
+CPPFLAGS = $(CXXFLAGS) -MMD -MP -Wall -std=c++20 -O3 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi2
 
-CXX=g++
+CXX ?= g++
 
-BINARIES = $(patsubst %.cpp,%,$(wildcard *.cpp))
+BINARIES = $(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 
 .PHONY: all clean $(BINARIES)
 all: $(BINARIES)
@@ -15,10 +15,10 @@ clean:
 ifeq ($(origin IPPROOT), undefined)
 IPPFLAGS =
 else
-IPPFLAGS = -I$(IPPROOT)/include -D_IPP_RADIX_IS_PRESENT_ -L$(IPPROOT)/lib/intel64 -lippcore -lipps
+IPPFLAGS = -I$(IPPROOT)/include -DIPP_RADIX_IS_PRESENT_ -L$(IPPROOT)/lib/intel64 -lippcore -lipps
 endif
 
-$(addprefix $(BUILD_DIR)/,$(BINARIES)): $(BUILD_DIR)/%: %.cpp
+$(addprefix $(BUILD_DIR)/,$(BINARIES)): $(BUILD_DIR)/%: src/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(IPPFLAGS) $< -o $@
 

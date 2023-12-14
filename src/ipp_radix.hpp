@@ -1,12 +1,14 @@
-#ifndef _IPP_RADIX_H_
-#define _IPP_RADIX_H_
-
-#ifdef _IPP_RADIX_IS_PRESENT_
+#pragma once
 
 #include <cstdint>
 
-namespace ippRadix {
-#include "ipp.h"
+#ifdef IPP_RADIX_IS_PRESENT_
+
+namespace simd_sort::ipp_radix {
+
+#include "ipp.h"  // IWYU pragma: keep IWYU pragma: export
+#include "ipp/ippdefs.h"
+#include "ipp/ipps.h"
 
 inline void sortAsc(uint8_t *pSrcDst, int len) {
   int pBufferSize;
@@ -161,8 +163,6 @@ inline void sort(K *pSrcDst, int len) {
   }
 }
 
-}  // namespace ippRadix
+}  // namespace simd_sort::ipp_radix
 
-#endif  // _IPP_RADIX_IS_PRESENT_
-
-#endif  // _IPP_RADIX_H_
+#endif  // IPP_RADIX_IS_PRESENT_

@@ -3,42 +3,43 @@
 #include <iomanip>
 #include <iostream>
 
-#include "lib/data.hpp"
+#include "cmp_sorters.hpp"
+#include "data.hpp"
 #include "perf.hpp"
-#include "radixSort.hpp"
+#include "radix_sort.hpp"
 
-#if __has_include("moeller/SIMDRadixSortGeneric.H")
-#include "moeller/SIMDRadixSortGeneric.H"
-#endif  // __has_include("moeller/SIMDRadixSortGeneric.H")
+#if __has_include("../moeller/SIMDRadixSortGeneric.H")
+#include "../moeller/SIMDRadixSortGeneric.H"
+#endif
+
+using namespace simd_sort;
 
 int main(int argc, char const *argv[]) {
   std::cout << std::fixed;
   std::cout << std::setprecision(6);
-#ifdef _IPP_RADIX_IS_PRESENT_
+#ifdef IPP_RADIX_IS_PRESENT_
   std::cout << "Initializing IPP..." << std::endl;
-  ippRadix::ippInit();
-#endif  // _IPP_RADIX_IS_PRESENT_
-  using AllSorts =
-      PerfTest<SortMethodRadixSort<radixSort::BitSorterSequential,
-                                   radixSort::CmpSorterInsertionSort>,
-               SortMethodRadixSort<radixSort::BitSorterSIMD<true>,
-                                   radixSort::CmpSorterInsertionSort>,
-               SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                   radixSort::CmpSorterInsertionSort>,
-               SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                   radixSort::CmpSorterBramasSmallSort>,
-               SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                   radixSort::CmpSorterNoSort>,
+  ipp_radix::ippInit();
+#endif
+  using AllSorts = PerfTest<
+      SortMethodRadixSort<radix_sort::BitSorterSequential,
+                          CmpSorterInsertionSort>,
+      SortMethodRadixSort<radix_sort::BitSorterSIMD<true>,
+                          CmpSorterInsertionSort>,
+      SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                          CmpSorterInsertionSort>,
+      SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                          CmpSorterBramasSmallSort>,
+      SortMethodRadixSort<radix_sort::BitSorterSIMD<false>, CmpSorterNoSort>,
 #ifdef _SIMD_RADIX_SORT_GENERIC_H_
-               SortMethodMoellerSeq, SortMethodMoellerCompress,
-#endif  // _SIMD_RADIX_SORT_GENERIC_H_
-#ifdef _IPP_RADIX_IS_PRESENT_
-               SortMethodIPPRadix,
-#endif  // _IPP_RADIX_IS_PRESENT_
-               SortMethodSTLSort, SortMethodBramas, SortMethodBlacher>;
-  using OnlyRadixSIMDNoCmp =
-      PerfTest<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                   radixSort::CmpSorterNoSort>>;
+      SortMethodMoellerSeq, SortMethodMoellerCompress,
+#endif
+#ifdef IPP_RADIX_IS_PRESENT_
+      SortMethodIPPRadix,
+#endif
+      SortMethodSTLSort, SortMethodBramas, SortMethodBlacher>;
+  using OnlyRadixSIMDNoCmp = PerfTest<
+      SortMethodRadixSort<radix_sort::BitSorterSIMD<false>, CmpSorterNoSort>>;
 
   std::function<void()> testFunctions[] = {
       OnlyRadixSIMDNoCmp::thresh<InputDistribution::Uniform, float, int64_t>,
@@ -107,49 +108,48 @@ int main(int argc, char const *argv[]) {
       AllSorts::thresh<InputDistribution::Uniform, int64_t>,
 
 #ifdef _SIMD_RADIX_SORT_GENERIC_H_
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress,
                          InputDistribution::Gaussian>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress, InputDistribution::Uniform>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress, InputDistribution::Zero>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress, InputDistribution::ZeroOne>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress, InputDistribution::Sorted>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress,
                          InputDistribution::ReverseSorted>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress,
                          InputDistribution::AlmostSorted>,
 
-      perfTestSpeedupAll<SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                             radixSort::CmpSorterInsertionSort>,
+      perfTestSpeedupAll<SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                             CmpSorterInsertionSort>,
                          SortMethodMoellerCompress,
                          InputDistribution::AlmostReverseSorted>,
-#endif  // _SIMD_RADIX_SORT_GENERIC_H_
+#endif
 
-      perfTestSpeedupAllKP<
-          SortMethodRadixSort<radixSort::BitSorterSIMD<true>,
-                              radixSort::CmpSorterInsertionSort>,
-          SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                              radixSort::CmpSorterInsertionSort>,
-          InputDistribution::Uniform, false, 1>,
+      perfTestSpeedupAllKP<SortMethodRadixSort<radix_sort::BitSorterSIMD<true>,
+                                               CmpSorterInsertionSort>,
+                           SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                               CmpSorterInsertionSort>,
+                           InputDistribution::Uniform, false, 1>,
 
       AllSorts::perfTest<InputDistribution::Uniform, int32_t, int32_t>,
       AllSorts::perfTest<InputDistribution::Gaussian, int32_t, int32_t>,

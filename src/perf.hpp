@@ -1,36 +1,28 @@
-#ifndef _PERF_H_
-#define _PERF_H_
-
-#pragma GCC diagnostic push
-#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#pragma GCC diagnostic ignored "-Wuninitialized"
-#endif
-#include <x86intrin.h>
-#pragma GCC diagnostic pop
-#include <time.h>
+#pragma once
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <string>
 #include <tuple>
 
-#include "blacher/avx2sort.h"
-#include "bramas/sort512.hpp"
-#include "bramas/sort512kv.hpp"
-#include "lib/data.hpp"
-#include "lib/ippRadix.hpp"
-#include "lib/type_name.hpp"
-#include "radixSort.hpp"
+#include "../blacher/avx2sort.h"
+#include "../bramas/sort512.hpp"
+#include "../bramas/sort512kv.hpp"
+#include "common.hpp"
+#include "data.hpp"
+#include "ipp_radix.hpp"
+#include "radix_sort.hpp"
 
-#if __has_include("moeller/SIMDRadixSortGeneric.H")
-#include "moeller/SIMDRadixSortGeneric.H"
-#endif  // __has_include("moeller/SIMDRadixSortGeneric.H")
+#if __has_include("../moeller/SIMDRadixSortGeneric.H")
+#include "../moeller/SIMDRadixSortGeneric.H"
+#endif
+
+namespace simd_sort {
 
 #ifdef __clang__
 const std::string dataDir = "/tmp/radixSortData-clang";
@@ -40,52 +32,22 @@ const std::string dataDir = "/tmp/radixSortData-gcc";
 #error "Unknown compiler"
 #endif
 
-template <std::size_t Bytes>
-struct _UInt;
-template <>
-struct _UInt<1> {
-  using type = uint8_t;
-};
-template <>
-struct _UInt<2> {
-  using type = uint16_t;
-};
-template <>
-struct _UInt<4> {
-  using type = uint32_t;
-};
-template <>
-struct _UInt<8> {
-  using type = uint64_t;
-};
-#ifdef _SIMD_RADIX_SORT_GENERIC_H_
-template <>
-struct _UInt<16> {
-  using type = radix::uint128_t;
-};
-#endif  // _SIMD_RADIX_SORT_GENERIC_H_
-
-template <std::size_t Bytes>
-using UInt = typename _UInt<Bytes>::type;
-
 template <typename BitSorter, typename CmpSorter, bool Combined = false>
 struct SortMethodRadixSort {
   static std::string name() {
     std::string result = "Radix";
-    if constexpr (std::is_same_v<BitSorter, radixSort::BitSorterSequential>) {
+    if constexpr (std::is_same_v<BitSorter, radix_sort::BitSorterSequential>) {
       result += "Seq";
     } else if constexpr (std::is_same_v<BitSorter,
-                                        radixSort::BitSorterSIMD<false>>) {
+                                        radix_sort::BitSorterSIMD<false>>) {
       result += "SIMD";
     } else if constexpr (std::is_same_v<BitSorter,
-                                        radixSort::BitSorterSIMD<true>>) {
+                                        radix_sort::BitSorterSIMD<true>>) {
       result += "SIMDOneReg";
     }
-    if constexpr (std::is_same_v<CmpSorter,
-                                 radixSort::CmpSorterBramasSmallSort>) {
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
       result += "BramSmall";
-    } else if constexpr (std::is_same_v<CmpSorter,
-                                        radixSort::CmpSorterNoSort>) {
+    } else if constexpr (std::is_same_v<CmpSorter, CmpSorterNoSort>) {
       result += "NoCmp";
     }
     if constexpr (Combined) {
@@ -102,13 +64,12 @@ struct SortMethodRadixSort {
       return false;
     }
     // if the one reg version does not have a difference, don't test it
-    if constexpr (std::is_same_v<BitSorter, radixSort::BitSorterSIMD<true>>) {
+    if constexpr (std::is_same_v<BitSorter, radix_sort::BitSorterSIMD<true>>) {
       if constexpr (std::max({std::size_t(0), sizeof(Ps)...}) <= sizeof(K)) {
         return false;
       }
     }
-    if constexpr (std::is_same_v<CmpSorter,
-                                 radixSort::CmpSorterBramasSmallSort>) {
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
       if constexpr (sizeof...(Ps) == 0) {
         return std::is_same_v<K, int> || std::is_same_v<K, double>;
       }
@@ -121,12 +82,12 @@ struct SortMethodRadixSort {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num, K *keys, Ps *...payloads) {
-    if constexpr (std::is_same_v<CmpSorter,
-                                 radixSort::CmpSorterBramasSmallSort>) {
+  static void sort(SortIndex num, K *keys, Ps *...payloads) {
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
       sortThresh(16 * 64 / sizeof(K), num, keys, payloads...);
     } else {
-      if constexpr (std::is_same_v<BitSorter, radixSort::BitSorterSequential>) {
+      if constexpr (std::is_same_v<BitSorter,
+                                   radix_sort::BitSorterSequential>) {
         sortThresh(64, num, keys, payloads...);
       } else {
         sortThresh(16, num, keys, payloads...);
@@ -135,11 +96,11 @@ struct SortMethodRadixSort {
   }
 
   template <typename K, typename... Ps>
-  static void sortThresh(radixSort::SortIndex cmpSortThresh,
-                         radixSort::SortIndex num, K *keys, Ps *...payloads) {
+  static void sortThresh(SortIndex cmpSortThresh, SortIndex num, K *keys,
+                         Ps *...payloads) {
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    radixSort::sort<true, BitSorter, CmpSorter>(cmpSortThresh, num, keys,
-                                                payloads...);
+    radix_sort::sort<true, BitSorter, CmpSorter>(cmpSortThresh, num, keys,
+                                                 payloads...);
   }
 };
 
@@ -161,17 +122,23 @@ struct SortMethodMoellerCompress {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num, DataElement<K, Ps...> *elems) {
+  static void sort(SortIndex num, DataElement<K, Ps...> *elems) {
     sortThresh(16, num, elems);
   }
 
-  template <typename K, typename... Ps>
-  static void sortThresh(radix::SortIndex cmpSortThresh,
-                         radixSort::SortIndex num,
-                         DataElement<K, Ps...> *elems) {
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    radix::simdRadixSortCompress<K, true, UInt<sizeof(DataElement<K, Ps...>)>>(
-        (UInt<sizeof(DataElement<K, Ps...>)> *)elems, 0, num - 1,
+  template <typename K>
+  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
+                         DataElement<K> *elems) {
+    radix::simdRadixSortCompress<K, true>(
+        (typename radix::UInt<sizeof(K)>::T *)elems, 0, num - 1, cmpSortThresh);
+  }
+
+  template <typename K, typename P>
+  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
+                         DataElement<K, P> *elems) {
+    static_assert(sizeof(K) >= sizeof(P), "Unsupported type combination");
+    radix::simdRadixSortCompress<K, true>(
+        (typename radix::UInt<sizeof(K)>::T2 *)elems, 0, num - 1,
         cmpSortThresh);
   }
 };
@@ -193,18 +160,23 @@ struct SortMethodMoellerSeq {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num, DataElement<K, Ps...> *elems) {
+  static void sort(SortIndex num, DataElement<K, Ps...> *elems) {
     sortThresh(64, num, elems);
   }
 
-  template <typename K, typename... Ps>
-  static void sortThresh(radix::SortIndex cmpSortThresh,
-                         radixSort::SortIndex num,
-                         DataElement<K, Ps...> *elems) {
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    radix::seqRadixSort<K, true, UInt<sizeof(DataElement<K, Ps...>)>>(
-        (UInt<sizeof(DataElement<K, Ps...>)> *)elems, 0, num - 1,
-        cmpSortThresh);
+  template <typename K>
+  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
+                         DataElement<K> *elems) {
+    radix::seqRadixSort<K, true>((typename radix::UInt<sizeof(K)>::T *)elems, 0,
+                                 num - 1, cmpSortThresh);
+  }
+
+  template <typename K, typename P>
+  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
+                         DataElement<K, P> *elems) {
+    static_assert(sizeof(K) >= sizeof(P), "Unsupported type combination");
+    radix::seqRadixSort<K, true>((typename radix::UInt<sizeof(K)>::T2 *)elems,
+                                 0, num - 1, cmpSortThresh);
   }
 };
 #endif  // _SIMD_RADIX_SORT_GENERIC_H_
@@ -220,14 +192,13 @@ struct SortMethodSTLSort {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num,
-                   DataElement<K, Ps...> *keysAndPayloads) {
+  static void sort(SortIndex num, DataElement<K, Ps...> *keysAndPayloads) {
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
     std::sort(keysAndPayloads, keysAndPayloads + num);
   }
 };
 
-#ifdef _IPP_RADIX_IS_PRESENT_
+#ifdef IPP_RADIX_IS_PRESENT_
 struct SortMethodIPPRadix {
   static std::string name() { return "IPPRadix"; }
   static constexpr bool areKeyAndPayloadSeparate = false;
@@ -239,14 +210,13 @@ struct SortMethodIPPRadix {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num,
-                   DataElement<K, Ps...> *keysAndPayloads) {
+  static void sort(SortIndex num, DataElement<K, Ps...> *keysAndPayloads) {
     static_assert(sizeof...(Ps) == 0, "IPPRadix does not support payloads");
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    ippRadix::sort((K *)keysAndPayloads, num);
+    ipp_radix::sort((K *)keysAndPayloads, num);
   }
 };
-#endif  // _IPP_RADIX_IS_PRESENT_
+#endif  // IPP_RADIX_IS_PRESENT_
 
 struct SortMethodBramas {
   static std::string name() { return "BramasSort"; }
@@ -265,7 +235,7 @@ struct SortMethodBramas {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num, K *keys, Ps *...payloads) {
+  static void sort(SortIndex num, K *keys, Ps *...payloads) {
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
     static_assert(sizeof...(Ps) == 0 || sizeof...(Ps) == 1,
                   "SortMethodBramas does not support more than 1 payload");
@@ -294,7 +264,7 @@ struct SortMethodBlacher {
   }
 
   template <typename K, typename... Ps>
-  static void sort(radixSort::SortIndex num, K *keys, Ps *...payloads) {
+  static void sort(SortIndex num, K *keys, Ps *...payloads) {
     static_assert(sizeof...(Ps) == 0 && std::is_same_v<K, int32_t>,
                   "SortMethodBlacher only supports int32_t key and no payload");
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
@@ -366,7 +336,7 @@ double measureTimePerElementWithRepsAndWarmup(std::size_t num,
 
 template <typename SortMethod, typename K, typename... Ps>
 double measureTimePerElementThresh(const Data<K, Ps...> &data,
-                                   radixSort::SortIndex cmpSortThreshold) {
+                                   SortIndex cmpSortThreshold) {
   Data<K, Ps...> copyOfData(data);
   static_assert(SortMethod::hasThreshold, "SortMethod does not have threshold");
   struct timespec start, end;
@@ -406,7 +376,7 @@ double measureTimePerElementThresh(const Data<K, Ps...> &data,
 template <typename SortMethod, typename K, typename... Ps>
 double measureTimePerElementThreshWithRepsAndWarmup(
     std::size_t num, InputDistribution distribution,
-    radixSort::SortIndex cmpSortThreshold) {
+    SortIndex cmpSortThreshold) {
   std::size_t numberOfTests = std::max<std::size_t>(1, (1 << 22) / num);
   std::size_t numberOfWarmups = std::max<std::size_t>(1, (1 << 18) / num);
 
@@ -450,20 +420,19 @@ void perfTestThresh() {
 
   file << "cmpThresh"
        << " " << num << std::endl;
-  const radixSort::SortIndex maxThresh =
+  const SortIndex maxThresh =
       std::is_same_v<SortMethod,
-                     SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                         radixSort::CmpSorterNoSort>>
+                     SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                         CmpSorterNoSort>>
           ? num
           : 512;
-  const radixSort::SortIndex minThresh =
+  const SortIndex minThresh =
       std::is_same_v<SortMethod,
-                     SortMethodRadixSort<radixSort::BitSorterSIMD<false>,
-                                         radixSort::CmpSorterNoSort>>
+                     SortMethodRadixSort<radix_sort::BitSorterSIMD<false>,
+                                         CmpSorterNoSort>>
           ? 1
           : 2;
-  for (radixSort::SortIndex thresh = minThresh; thresh <= maxThresh;
-       thresh *= 2) {
+  for (SortIndex thresh = minThresh; thresh <= maxThresh; thresh *= 2) {
     file << thresh;
     if (std::is_same_v<SortMethod, SortMethodBramas> &&
         (Distribution == InputDistribution::Zero ||
@@ -748,5 +717,4 @@ struct PerfTest {
         ...);
   }
 };
-
-#endif  // _PERF_H
+}  // namespace simd_sort

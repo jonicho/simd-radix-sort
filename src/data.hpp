@@ -1,26 +1,43 @@
-#ifndef _DATA_H_
-#define _DATA_H_
+#pragma once
+
+#include <sys/types.h>
 
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <bitset>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <random>
+#include <string>
 #include <tuple>
 #include <type_traits>
 
-#include "../radixSort.hpp"
+namespace simd_sort {
 
-using radixSort::DataElement;
+template <typename K, typename... Ps>
+struct DataElement {
+  K key;
+  std::tuple<Ps...> payloads;
+  bool operator<(const DataElement &other) const { return key < other.key; }
+  bool operator>(const DataElement &other) const { return key > other.key; }
+};
+
+// specialization of DataElement for no payloads, because an empty
+// tuple still uses one byte of space, we don't want that
+template <typename K>
+struct DataElement<K> {
+  K key;
+  bool operator<(const DataElement &other) const { return key < other.key; }
+  bool operator>(const DataElement &other) const { return key > other.key; }
+};
 
 template <typename T>
 T getRandom() {
@@ -71,7 +88,7 @@ struct Data {
   std::tuple<Ps *...> payloads;
   std::size_t num;
 
-  Data(std::size_t num, InputDistribution distribution, uint seed = time(NULL))
+  Data(std::size_t num, InputDistribution distribution, long seed = time(NULL))
       : num(num) {
     keys = new K[num];
     payloads = std::make_tuple(new Ps[num]...);
@@ -196,8 +213,8 @@ struct Data {
     return true;
   }
 
-  uint numUnsorted(bool up) const {
-    uint numUnsorted = 0;
+  std::size_t numUnsorted(bool up) const {
+    std::size_t numUnsorted = 0;
     if (up) {
       for (std::size_t i = 1; i < num; ++i) {
         if (keys[i - 1] > keys[i]) {
@@ -216,7 +233,7 @@ struct Data {
 
   bool checkPayloads() const {
     for (std::size_t i = 0; i < num; ++i) {
-      uint seed = 0;
+      unsigned int seed = 0;
       memcpy(&seed, &keys[i], std::min(sizeof(K), sizeof(uint)));
       srand(seed);
       bool payloadsOk = true;
@@ -355,7 +372,7 @@ struct Data {
 
   void makePayloads() {
     for (std::size_t i = 0; i < num; ++i) {
-      uint seed = 0;
+      unsigned int seed = 0;
       memcpy(&seed, &keys[i], std::min(sizeof(K), sizeof(uint)));
       srand(seed);
       std::apply(
@@ -368,5 +385,4 @@ struct Data {
     }
   }
 };
-
-#endif  // _DATA_H_
+}  // namespace simd_sort
