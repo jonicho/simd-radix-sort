@@ -13,59 +13,30 @@ inline constexpr bool always_false_v = false;
 
 using SortIndex = ssize_t;
 
-namespace internal {
 template <typename T>
-struct type_name {
-  static constexpr const char *value = typeid(T).name();
-};
+inline constexpr const char *type_name = typeid(T).name();
 template <>
-struct type_name<bool> {
-  static constexpr const char *value = "bool";
-};
+inline constexpr const char *type_name<bool> = "bool";
 template <>
-struct type_name<uint8_t> {
-  static constexpr const char *value = "uint8";
-};
+inline constexpr const char *type_name<uint8_t> = "uint8";
 template <>
-struct type_name<uint16_t> {
-  static constexpr const char *value = "uint16";
-};
+inline constexpr const char *type_name<uint16_t> = "uint16";
 template <>
-struct type_name<uint32_t> {
-  static constexpr const char *value = "uint32";
-};
+inline constexpr const char *type_name<uint32_t> = "uint32";
 template <>
-struct type_name<uint64_t> {
-  static constexpr const char *value = "uint64";
-};
+inline constexpr const char *type_name<uint64_t> = "uint64";
 template <>
-struct type_name<int8_t> {
-  static constexpr const char *value = "int8";
-};
+inline constexpr const char *type_name<int8_t> = "int8";
 template <>
-struct type_name<int16_t> {
-  static constexpr const char *value = "int16";
-};
+inline constexpr const char *type_name<int16_t> = "int16";
 template <>
-struct type_name<int32_t> {
-  static constexpr const char *value = "int32";
-};
+inline constexpr const char *type_name<int32_t> = "int32";
 template <>
-struct type_name<int64_t> {
-  static constexpr const char *value = "int64";
-};
+inline constexpr const char *type_name<int64_t> = "int64";
 template <>
-struct type_name<float> {
-  static constexpr const char *value = "float";
-};
+inline constexpr const char *type_name<float> = "float";
 template <>
-struct type_name<double> {
-  static constexpr const char *value = "double";
-};
-}  // namespace internal
-
-template <typename T>
-constexpr const char *type_name = internal::type_name<T>::value;
+inline constexpr const char *type_name<double> = "double";
 
 template <std::size_t Bytes>
 struct LargeUInt {
@@ -132,6 +103,6 @@ UInt<Bytes> setBit(std::size_t n) {
 }
 
 template <std::size_t X>
-static constexpr bool is_power_of_two = X > 0 && (X & (X - 1)) == 0;
+inline constexpr bool is_power_of_two = X > 0 && (X & (X - 1)) == 0;
 
 }  // namespace simd_sort
