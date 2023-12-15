@@ -59,7 +59,7 @@ enum class InputDistribution {
   AlmostReverseSorted,
 };
 
-consteval const char *inputDistributionToString(
+constexpr const char *inputDistributionToString(
     const InputDistribution distribution) {
   switch (distribution) {
     case InputDistribution::Zero:

@@ -17,11 +17,11 @@
 using namespace simd_sort;
 using namespace simd_sort::radix_sort;
 
-template <bool Combined, bool Up, InputDistribution Distribution,
-          typename BitSorter = BitSorterSequential,
+template <bool Combined, bool Up, typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
-bool test(const std::size_t num, const unsigned int seed = time(NULL)) {
+bool test(InputDistribution distribution, const std::size_t num,
+          const unsigned int seed = time(NULL)) {
   std::cout << "Testing: K: " << type_name<K> << ", ";
   if constexpr (sizeof...(Ps) > 0) {
     std::cout << "Ps: ";
@@ -32,7 +32,7 @@ bool test(const std::size_t num, const unsigned int seed = time(NULL)) {
   } else {
     std::cout << "Separate, ";
   }
-  std::cout << "Distribution: " << inputDistributionToString(Distribution)
+  std::cout << "Distribution: " << inputDistributionToString(distribution)
             << ", "
             << "Up: " << Up << ", " << BitSorter::name() << ", "
             << CmpSorter::name() << ", ";
@@ -40,7 +40,7 @@ bool test(const std::size_t num, const unsigned int seed = time(NULL)) {
     std::cout << "NOT TESTING" << std::endl;
     return true;
   }
-  Data<K, Ps...> data(num, Distribution, seed);
+  Data<K, Ps...> data(num, distribution, seed);
   const Data<K, Ps...> copyOfData(data);
   // std::cout << std::endl; data.printBinary();
   if constexpr (Combined) {
@@ -83,22 +83,15 @@ bool testAllDistributions(const std::size_t num,
     return true;
   } else {
     bool passed = true;
-    passed &= test<Combined, Up, InputDistribution::Gaussian, BitSorter,
-                   CmpSorter, K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::Uniform, BitSorter,
-                   CmpSorter, K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::Zero, BitSorter, CmpSorter,
-                   K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::ZeroOne, BitSorter,
-                   CmpSorter, K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::Sorted, BitSorter,
-                   CmpSorter, K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::ReverseSorted, BitSorter,
-                   CmpSorter, K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::AlmostSorted, BitSorter,
-                   CmpSorter, K, Ps...>(num, seed);
-    passed &= test<Combined, Up, InputDistribution::AlmostReverseSorted,
-                   BitSorter, CmpSorter, K, Ps...>(num, seed);
+    for (const auto distribution : std::vector<InputDistribution>{
+             InputDistribution::Gaussian, InputDistribution::Uniform,
+             InputDistribution::Zero, InputDistribution::ZeroOne,
+             InputDistribution::Sorted, InputDistribution::ReverseSorted,
+             InputDistribution::AlmostSorted,
+             InputDistribution::AlmostReverseSorted}) {
+      passed &= test<Combined, Up, BitSorter, CmpSorter, K, Ps...>(distribution,
+                                                                   num, seed);
+    }
     return passed;
   }
 }
