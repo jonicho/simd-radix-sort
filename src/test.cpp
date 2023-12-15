@@ -21,7 +21,7 @@ template <bool Combined, bool Up, InputDistribution Distribution,
           typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
-bool test(std::size_t num, unsigned int seed = time(NULL)) {
+bool test(const std::size_t num, const unsigned int seed = time(NULL)) {
   std::cout << "Testing: K: " << type_name<K> << ", ";
   if constexpr (sizeof...(Ps) > 0) {
     std::cout << "Ps: ";
@@ -32,7 +32,7 @@ bool test(std::size_t num, unsigned int seed = time(NULL)) {
   } else {
     std::cout << "Separate, ";
   }
-  std::cout << "Distribution: " << inputDistributionToString<Distribution>()
+  std::cout << "Distribution: " << inputDistributionToString(Distribution)
             << ", "
             << "Up: " << Up << ", " << BitSorter::name() << ", "
             << CmpSorter::name() << ", ";
@@ -41,7 +41,7 @@ bool test(std::size_t num, unsigned int seed = time(NULL)) {
     return true;
   }
   Data<K, Ps...> data(num, Distribution, seed);
-  Data<K, Ps...> copyOfData(data);
+  const Data<K, Ps...> copyOfData(data);
   // std::cout << std::endl; data.printBinary();
   if constexpr (Combined) {
     DataElement<K, Ps...> *keysAndPayloads = (DataElement<K, Ps...> *)malloc(
@@ -52,7 +52,7 @@ bool test(std::size_t num, unsigned int seed = time(NULL)) {
     free(keysAndPayloads);
   } else {
     std::apply(
-        [&](auto *...payloads) {
+        [&](auto *const... payloads) {
           sort<Up, BitSorter, CmpSorter>(16, data.num, data.keys, payloads...);
         },
         data.payloads);
@@ -60,11 +60,11 @@ bool test(std::size_t num, unsigned int seed = time(NULL)) {
   // data.printBinary();
   // data.keys[1] = data.keys[0];
   // std::apply(
-  //   [&](auto *...payloads) {
+  //   [&](auto *const ...payloads) {
   //     ((payloads[1] = payloads[0]), ...);
   //   },
   //   data.payloads);
-  std::string errorMessage = data.checkData(Up, copyOfData);
+  const std::string errorMessage = data.checkData(Up, copyOfData);
   if (errorMessage.empty()) {
     std::cout << "passed" << std::endl;
     return true;
@@ -77,7 +77,8 @@ bool test(std::size_t num, unsigned int seed = time(NULL)) {
 template <bool Combined, bool Up, typename BitSorter = BitSorterSequential,
           typename CmpSorter = CmpSorterInsertionSort, typename K,
           typename... Ps>
-bool testAllDistributions(std::size_t num, unsigned int seed = time(NULL)) {
+bool testAllDistributions(const std::size_t num,
+                          const unsigned int seed = time(NULL)) {
   if constexpr (Combined && !is_power_of_two<sizeof(DataElement<K, Ps...>)>) {
     return true;
   } else {
@@ -103,7 +104,8 @@ bool testAllDistributions(std::size_t num, unsigned int seed = time(NULL)) {
 }
 
 template <typename K, typename... Ps>
-bool testSequential(std::size_t num, unsigned int seed = time(NULL)) {
+bool testSequential(const std::size_t num,
+                    const unsigned int seed = time(NULL)) {
   bool passed = true;
   passed &= testAllDistributions<false, true, BitSorterSequential,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
@@ -117,7 +119,7 @@ bool testSequential(std::size_t num, unsigned int seed = time(NULL)) {
 }
 
 template <typename K, typename... Ps>
-bool testSIMD(std::size_t num, unsigned int seed = time(NULL)) {
+bool testSIMD(const std::size_t num, const unsigned int seed = time(NULL)) {
   bool passed = true;
   passed &= testAllDistributions<false, true, BitSorterSIMD<false>,
                                  CmpSorterInsertionSort, K, Ps...>(num, seed);
@@ -152,14 +154,8 @@ bool testSIMD(std::size_t num, unsigned int seed = time(NULL)) {
 }
 
 int main(int argc, char const *argv[]) {
-  std::size_t maxNum = 10000;
-  if (argc > 1) {
-    maxNum = std::stoi(argv[1]);
-  }
-  unsigned int seed = time(NULL);
-  if (argc > 2) {
-    seed = std::stoi(argv[2]);
-  }
+  const std::size_t maxNum = argc > 1 ? std::stoi(argv[1]) : 10000;
+  const unsigned int seed = argc > 2 ? std::stoi(argv[2]) : time(NULL);
   bool passed = true;
   for (std::size_t num = 1; num <= maxNum; num *= 10) {
     std::cout << "Testing " << num << " elements" << std::endl;

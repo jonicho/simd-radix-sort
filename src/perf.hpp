@@ -82,7 +82,7 @@ struct SortMethodRadixSort {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, K *keys, Ps *...payloads) {
+  static void sort(const SortIndex num, K *const keys, Ps *const... payloads) {
     if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
       sortThresh(16 * 64 / sizeof(K), num, keys, payloads...);
     } else {
@@ -96,8 +96,8 @@ struct SortMethodRadixSort {
   }
 
   template <typename K, typename... Ps>
-  static void sortThresh(SortIndex cmpSortThresh, SortIndex num, K *keys,
-                         Ps *...payloads) {
+  static void sortThresh(const SortIndex cmpSortThresh, const SortIndex num,
+                         K *const keys, Ps *const... payloads) {
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
     radix_sort::sort<true, BitSorter, CmpSorter>(cmpSortThresh, num, keys,
                                                  payloads...);
@@ -122,20 +122,20 @@ struct SortMethodMoellerCompress {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, DataElement<K, Ps...> *elems) {
+  static void sort(const SortIndex num, DataElement<K, Ps...> *const elems) {
     sortThresh(16, num, elems);
   }
 
   template <typename K>
-  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
-                         DataElement<K> *elems) {
+  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
+                         DataElement<K> *const elems) {
     radix::simdRadixSortCompress<K, true>(
         (typename radix::UInt<sizeof(K)>::T *)elems, 0, num - 1, cmpSortThresh);
   }
 
   template <typename K, typename P>
-  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
-                         DataElement<K, P> *elems) {
+  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
+                         DataElement<K, P> *const elems) {
     static_assert(sizeof(K) >= sizeof(P), "Unsupported type combination");
     radix::simdRadixSortCompress<K, true>(
         (typename radix::UInt<sizeof(K)>::T2 *)elems, 0, num - 1,
@@ -160,20 +160,20 @@ struct SortMethodMoellerSeq {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, DataElement<K, Ps...> *elems) {
+  static void sort(const SortIndex num, DataElement<K, Ps...> *const elems) {
     sortThresh(64, num, elems);
   }
 
   template <typename K>
-  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
-                         DataElement<K> *elems) {
+  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
+                         DataElement<K> *const elems) {
     radix::seqRadixSort<K, true>((typename radix::UInt<sizeof(K)>::T *)elems, 0,
                                  num - 1, cmpSortThresh);
   }
 
   template <typename K, typename P>
-  static void sortThresh(std::size_t cmpSortThresh, std::size_t num,
-                         DataElement<K, P> *elems) {
+  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
+                         DataElement<K, P> *const elems) {
     static_assert(sizeof(K) >= sizeof(P), "Unsupported type combination");
     radix::seqRadixSort<K, true>((typename radix::UInt<sizeof(K)>::T2 *)elems,
                                  0, num - 1, cmpSortThresh);
@@ -192,7 +192,8 @@ struct SortMethodSTLSort {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, DataElement<K, Ps...> *keysAndPayloads) {
+  static void sort(const SortIndex num,
+                   DataElement<K, Ps...> *const keysAndPayloads) {
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
     std::sort(keysAndPayloads, keysAndPayloads + num);
   }
@@ -210,7 +211,8 @@ struct SortMethodIPPRadix {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, DataElement<K, Ps...> *keysAndPayloads) {
+  static void sort(const SortIndex num,
+                   DataElement<K, Ps...> *const keysAndPayloads) {
     static_assert(sizeof...(Ps) == 0, "IPPRadix does not support payloads");
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
     ipp_radix::sort((K *)keysAndPayloads, num);
@@ -235,7 +237,7 @@ struct SortMethodBramas {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, K *keys, Ps *...payloads) {
+  static void sort(const SortIndex num, K *const keys, Ps *const... payloads) {
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
     static_assert(sizeof...(Ps) == 0 || sizeof...(Ps) == 1,
                   "SortMethodBramas does not support more than 1 payload");
@@ -264,7 +266,7 @@ struct SortMethodBlacher {
   }
 
   template <typename K, typename... Ps>
-  static void sort(SortIndex num, K *keys, Ps *...) {
+  static void sort(const SortIndex num, K *const keys, Ps *const...) {
     static_assert(sizeof...(Ps) == 0 && std::is_same_v<K, int32_t>,
                   "SortMethodBlacher only supports int32_t key and no payload");
     static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
@@ -279,7 +281,7 @@ double measureTimePerElement(const Data<K, Ps...> &data) {
   if constexpr (SortMethod::areKeyAndPayloadSeparate) {
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
     std::apply(
-        [&](auto *...payloads) {
+        [&](auto *const... payloads) {
           SortMethod::template sort(copyOfData.num, copyOfData.keys,
                                     payloads...);
         },
@@ -304,18 +306,19 @@ double measureTimePerElement(const Data<K, Ps...> &data) {
               << std::endl;
     exit(-1);
   }
-  double nanoSeconds =
+  const double nanoSeconds =
       (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
   return nanoSeconds / (double)data.num;
 }
 
 template <typename SortMethod, typename K, typename... Ps>
-double measureTimePerElementWithRepsAndWarmup(std::size_t num,
-                                              InputDistribution distribution) {
-  std::size_t numberOfTests = std::max<std::size_t>(1, (1 << 22) / num);
-  std::size_t numberOfWarmups = std::max<std::size_t>(1, (1 << 18) / num);
+double measureTimePerElementWithRepsAndWarmup(
+    const std::size_t num, const InputDistribution distribution) {
+  const std::size_t numberOfTests = std::max<std::size_t>(1, (1 << 22) / num);
+  const std::size_t numberOfWarmups = std::max<std::size_t>(1, (1 << 18) / num);
 
-  Data<K, Ps...> **data = new Data<K, Ps...> *[numberOfTests + numberOfWarmups];
+  Data<K, Ps...> **const data =
+      new Data<K, Ps...> *[numberOfTests + numberOfWarmups];
   for (std::size_t i = 0; i < numberOfTests + numberOfWarmups; i++) {
     data[i] = new Data<K, Ps...>(num, distribution);
   }
@@ -336,22 +339,23 @@ double measureTimePerElementWithRepsAndWarmup(std::size_t num,
 
 template <typename SortMethod, typename K, typename... Ps>
 double measureTimePerElementThresh(const Data<K, Ps...> &data,
-                                   SortIndex cmpSortThreshold) {
+                                   const SortIndex cmpSortThreshold) {
   Data<K, Ps...> copyOfData(data);
   static_assert(SortMethod::hasThreshold, "SortMethod does not have threshold");
   struct timespec start, end;
   if constexpr (SortMethod::areKeyAndPayloadSeparate) {
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
     std::apply(
-        [&](auto *...payloads) {
+        [&](auto *const... payloads) {
           SortMethod::template sortThresh(cmpSortThreshold, copyOfData.num,
                                           copyOfData.keys, payloads...);
         },
         copyOfData.payloads);
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
   } else {
-    DataElement<K, Ps...> *keysAndPayloads = (DataElement<K, Ps...> *)malloc(
-        copyOfData.num * sizeof(DataElement<K, Ps...>));
+    DataElement<K, Ps...> *const keysAndPayloads =
+        (DataElement<K, Ps...> *)malloc(copyOfData.num *
+                                        sizeof(DataElement<K, Ps...>));
     copyOfData.convertToSingleArray(keysAndPayloads);
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
     SortMethod::template sortThresh(cmpSortThreshold, copyOfData.num,
@@ -375,12 +379,13 @@ double measureTimePerElementThresh(const Data<K, Ps...> &data,
 
 template <typename SortMethod, typename K, typename... Ps>
 double measureTimePerElementThreshWithRepsAndWarmup(
-    std::size_t num, InputDistribution distribution,
-    SortIndex cmpSortThreshold) {
-  std::size_t numberOfTests = std::max<std::size_t>(1, (1 << 22) / num);
-  std::size_t numberOfWarmups = std::max<std::size_t>(1, (1 << 18) / num);
+    const std::size_t num, const InputDistribution distribution,
+    const SortIndex cmpSortThreshold) {
+  const std::size_t numberOfTests = std::max<std::size_t>(1, (1 << 22) / num);
+  const std::size_t numberOfWarmups = std::max<std::size_t>(1, (1 << 18) / num);
 
-  Data<K, Ps...> **data = new Data<K, Ps...> *[numberOfTests + numberOfWarmups];
+  Data<K, Ps...> **const data =
+      new Data<K, Ps...> *[numberOfTests + numberOfWarmups];
   for (std::size_t i = 0; i < numberOfTests + numberOfWarmups; i++) {
     data[i] = new Data<K, Ps...>(num, distribution);
   }
@@ -410,7 +415,7 @@ void perfTestThresh() {
   std::string perfDescription = std::string("cmpThresh-") + type_name<K>;
   ((perfDescription += std::string("-") + type_name<Ps>), ...);
   perfDescription += std::string("-") + SortMethod::name() + "-" +
-                     inputDistributionToString<Distribution>();
+                     inputDistributionToString(Distribution);
   std::ofstream file(dataDir + "/" + perfDescription + ".dat");
   file << std::fixed;
   file << std::setprecision(6);
@@ -460,7 +465,6 @@ template <typename SortMethod, typename SortMethodRelTo,
           typename... Ps>
 static std::string perfTestSpeedup(const size_t num) {
   std::string result = "";
-  Data<K, Ps...> data(num, Distribution);
   if ((std::is_same_v<SortMethodRelTo, SortMethodBramas> ||
        std::is_same_v<SortMethod,
                       SortMethodBramas>)&&(Distribution ==
@@ -479,10 +483,10 @@ static std::string perfTestSpeedup(const size_t num) {
                 !SortMethod::template isSupported<K, Ps...>()) {
     return "";
   }
-  double sumTimePerElementRel =
+  const double sumTimePerElementRel =
       measureTimePerElementWithRepsAndWarmup<SortMethodRelTo, K, Ps...>(
           num, Distribution);
-  double sumTimePerElement =
+  const double sumTimePerElement =
       measureTimePerElementWithRepsAndWarmup<SortMethod, K, Ps...>(
           num, Distribution);
   result += type_name<K>;
@@ -513,7 +517,7 @@ static void perfTestSpeedupAllKP() {
     perfDescription += "withPayloadFactor" + std::to_string(PayloadFactor);
   }
   perfDescription += std::string("-") +
-                     inputDistributionToString<Distribution>() +
+                     inputDistributionToString(Distribution) +
                      std::string("-") + std::to_string(num);
   std::ofstream file(dataDir + "/" + perfDescription + ".dat");
   file << std::fixed;
@@ -619,7 +623,7 @@ struct PerfTest {
     std::string perfDescription = std::string("tpe-") + type_name<K>;
     ((perfDescription += std::string("-") + type_name<Ps>), ...);
     perfDescription +=
-        std::string("-") + inputDistributionToString<Distribution>();
+        std::string("-") + inputDistributionToString(Distribution);
     std::ofstream file(dataDir + "/" + perfDescription + ".dat");
     file << std::fixed;
     file << std::setprecision(6);
@@ -670,7 +674,7 @@ struct PerfTest {
     std::string perfDescription = std::string() + type_name<K>;
     ((perfDescription += std::string("-") + type_name<Ps>), ...);
     perfDescription += std::string("-") +
-                       inputDistributionToString<Distribution>() +
+                       inputDistributionToString(Distribution) +
                        std::string("-") + std::to_string(num);
     std::ofstream file(dataDir + "/" + perfDescription + ".dat");
     std::cout << "Performing perf test for " << perfDescription << " ..."

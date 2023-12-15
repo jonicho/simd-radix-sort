@@ -64,8 +64,10 @@ struct Vec<T, Bytes, std::enable_if_t<(Bytes > 64) && is_power_of_two<Bytes>>> {
   static constexpr std::size_t numElems = Bytes / sizeof(T);
   static constexpr std::size_t numRegs = Bytes / 64;
   Vec() = default;
-  MMRegType<T, 64> &operator[](std::size_t i) { return mmReg[i]; }
-  const MMRegType<T, 64> &operator[](std::size_t i) const { return mmReg[i]; }
+  MMRegType<T, 64> &operator[](const std::size_t i) { return mmReg[i]; }
+  const MMRegType<T, 64> &operator[](const std::size_t i) const {
+    return mmReg[i];
+  }
 };
 
 template <std::size_t Size>
@@ -187,7 +189,7 @@ static inline Vec<T, Bytes> set_bit(const std::size_t bitNo) {
 }
 
 template <std::size_t Bytes = 64, typename T>
-static inline Vec<T, Bytes> loadu(const T *p) {
+static inline Vec<T, Bytes> loadu(const T *const p) {
   if constexpr (Bytes == 64) {
     return _mm512_loadu_si512(p);
   } else if constexpr (Bytes == 32) {
@@ -215,7 +217,7 @@ static inline Vec<T, Bytes> loadu(const T *p) {
 
 template <std::size_t Bytes = 64, typename T>
 static inline Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
-                                        const T *p) {
+                                        const T *const p) {
   if constexpr (Bytes == 64) {
 #ifdef __AVX512BW__
     if constexpr (sizeof(T) == 1) {
@@ -302,7 +304,7 @@ static inline Vec<T, Bytes> maskz_loadu(const Mask<Vec<T, Bytes>::numElems> m,
 }
 
 template <typename T, std::size_t Bytes>
-static inline void mask_compressstoreu(T *p,
+static inline void mask_compressstoreu(T *const p,
                                        const Mask<Vec<T, Bytes>::numElems> m,
                                        const Vec<T, Bytes> v) {
   if constexpr (Bytes == 64) {
@@ -363,17 +365,18 @@ static inline void mask_compressstoreu(T *p,
 #endif  // __AVX512VL__
   } else if constexpr (Bytes == 128 || Bytes == 256 || Bytes == 512) {
     Mask<Vec<T, Bytes>::numElems> mask = m;
+    T *pointer = p;
     for (std::size_t i = 0; i < Vec<T, Bytes>::numRegs; i++) {
       if constexpr (sizeof(T) == 2) {
-        _mm512_mask_compressstoreu_epi16(p, mask, v[i]);
+        _mm512_mask_compressstoreu_epi16(pointer, mask, v[i]);
       } else if constexpr (sizeof(T) == 4) {
-        _mm512_mask_compressstoreu_epi32(p, mask, v[i]);
+        _mm512_mask_compressstoreu_epi32(pointer, mask, v[i]);
       } else if constexpr (sizeof(T) <= 64) {
-        _mm512_mask_compressstoreu_epi64(p, mask, v[i]);
+        _mm512_mask_compressstoreu_epi64(pointer, mask, v[i]);
       } else {
         static_assert(always_false_v<T>, "Unsupported type size");
       }
-      p += kpopcnt((Mask<Vec<T, 64>::numElems>)mask);
+      pointer += kpopcnt((Mask<Vec<T, 64>::numElems>)mask);
       mask = kshiftr(mask, Vec<T, 64>::numElems);
     }
   } else {
@@ -397,7 +400,8 @@ static inline Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
       } else if constexpr (sizeof(T) == 8) {
         return _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
       } else if constexpr (sizeof(T) == 16) {
-        __mmask8 mask = _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+        const __mmask8 mask =
+            _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
         if (bitNo < 64) {
           // mask is now 0b0a 0b 0c 0d, we want 0baa bb cc dd
           return mask | (mask << 1);
@@ -406,7 +410,8 @@ static inline Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
           return mask | (mask >> 1);
         }
       } else if constexpr (sizeof(T) == 32) {
-        __mmask8 mask = _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+        const __mmask8 mask =
+            _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
         if (bitNo < 64) {
           // mask is now 0b000a 000b, we want 0baaaa bbbb
           return mask | (mask << 1) | (mask << 2) | (mask << 3);
@@ -421,7 +426,8 @@ static inline Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
           return (mask >> 3) | (mask >> 2) | (mask >> 1) | mask;
         }
       } else if constexpr (sizeof(T) == 64) {
-        __mmask8 mask = _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
+        const __mmask8 mask =
+            _mm512_test_epi64_mask(v, set_bit<T, Bytes>(bitNo));
         // mask is now 0b0000 000a, or 0b0000 00a0, or ...
         // we want 0baaaa aaaa
         return mask == 0 ? 0 : 0xff;

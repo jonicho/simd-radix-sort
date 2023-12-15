@@ -19,11 +19,11 @@ struct CmpSorterInsertionSort {
   static std::string name() { return "CmpSorterInsertionSort"; }
 
   template <bool Up, typename K, typename... Ps>
-  static inline void sort(SortIndex left, SortIndex right, K *keys,
-                          Ps *...payloads) {
+  static inline void sort(const SortIndex left, const SortIndex right,
+                          K *const keys, Ps *const... payloads) {
     for (SortIndex i = left + 1; i <= right; i++) {
-      K key = keys[i];
-      std::tuple<Ps...> payload = std::make_tuple(payloads[i]...);
+      const K key = keys[i];
+      const std::tuple<Ps...> payload = std::make_tuple(payloads[i]...);
       SortIndex j = i;
       while (j > left && (Up ? key < keys[j - 1] : key > keys[j - 1])) {
         keys[j] = keys[j - 1];
@@ -31,7 +31,7 @@ struct CmpSorterInsertionSort {
         j--;
       }
       keys[j] = key;
-      std::apply([&](Ps &...p) { ((payloads[j] = p), ...); }, payload);
+      std::apply([&](const Ps &...p) { ((payloads[j] = p), ...); }, payload);
     }
   }
 };
@@ -41,8 +41,8 @@ struct CmpSorterBramasSmallSort {
   static std::string name() { return "CmpSorterBramasSmallSort"; }
 
   template <bool Up, typename K, typename... Ps>
-  static inline void sort(SortIndex left, SortIndex right, K *keys,
-                          Ps *...payloads) {
+  static inline void sort(const SortIndex left, const SortIndex right,
+                          K *const keys, Ps *const... payloads) {
     static_assert(std::is_same_v<K, double> || std::is_same_v<K, int>,
                   "BramasSmallSort only supports int and double");
     static_assert(Up, "BramasSmallSort only supports sorting up");
@@ -67,8 +67,8 @@ struct CmpSorterNoSort {
   static std::string name() { return "CmpSorterNoSort"; }
 
   template <bool Up, typename K, typename... Ps>
-  static inline void sort(SortIndex left, SortIndex right, K *keys,
-                          Ps *...payloads) {
+  static inline void sort(const SortIndex left, const SortIndex right,
+                          K *const keys, Ps *const... payloads) {
     // do nothing
     (void)left;
     (void)right;

@@ -48,7 +48,7 @@ struct LargeUInt {
   LargeUInt(const LargeUInt &) = default;
   LargeUInt &operator=(const LargeUInt &) = default;
 
-  LargeUInt(uint64_t x) {
+  LargeUInt(const uint64_t x) {
     data[0] = x;
     for (std::size_t i = 1; i < Bytes / 8; i++) {
       data[i] = 0;
@@ -92,7 +92,7 @@ template <std::size_t Bytes>
 using UInt = typename internal::UInt<Bytes>::type;
 
 template <std::size_t Bytes>
-UInt<Bytes> setBit(std::size_t n) {
+UInt<Bytes> setBit(const std::size_t n) {
   if constexpr (Bytes <= 8) {
     return UInt<Bytes>(1ULL << n);
   } else {

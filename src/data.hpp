@@ -59,26 +59,27 @@ enum class InputDistribution {
   AlmostReverseSorted,
 };
 
-template <InputDistribution Distribution>
-constexpr const char *inputDistributionToString() {
-  if constexpr (Distribution == InputDistribution::Zero) {
-    return "Zero";
-  } else if constexpr (Distribution == InputDistribution::ZeroOne) {
-    return "ZeroOne";
-  } else if constexpr (Distribution == InputDistribution::Uniform) {
-    return "Uniform";
-  } else if constexpr (Distribution == InputDistribution::Gaussian) {
-    return "Gaussian";
-  } else if constexpr (Distribution == InputDistribution::Sorted) {
-    return "Sorted";
-  } else if constexpr (Distribution == InputDistribution::ReverseSorted) {
-    return "ReverseSorted";
-  } else if constexpr (Distribution == InputDistribution::AlmostSorted) {
-    return "AlmostSorted";
-  } else if constexpr (Distribution == InputDistribution::AlmostReverseSorted) {
-    return "AlmostReverseSorted";
-  } else {
-    return "Unknown";
+consteval const char *inputDistributionToString(
+    const InputDistribution distribution) {
+  switch (distribution) {
+    case InputDistribution::Zero:
+      return "Zero";
+    case InputDistribution::ZeroOne:
+      return "ZeroOne";
+    case InputDistribution::Uniform:
+      return "Uniform";
+    case InputDistribution::Gaussian:
+      return "Gaussian";
+    case InputDistribution::Sorted:
+      return "Sorted";
+    case InputDistribution::ReverseSorted:
+      return "ReverseSorted";
+    case InputDistribution::AlmostSorted:
+      return "AlmostSorted";
+    case InputDistribution::AlmostReverseSorted:
+      return "AlmostReverseSorted";
+    default:
+      return "Unknown";
   }
 }
 
@@ -88,10 +89,9 @@ struct Data {
   std::tuple<Ps *...> payloads;
   std::size_t num;
 
-  Data(std::size_t num, InputDistribution distribution, long seed = time(NULL))
-      : num(num) {
-    keys = new K[num];
-    payloads = std::make_tuple(new Ps[num]...);
+  Data(const std::size_t num, const InputDistribution distribution,
+       const long seed = time(NULL))
+      : keys(new K[num]), payloads(std::make_tuple(new Ps[num]...)), num(num) {
     std::mt19937 gen(seed);
     switch (distribution) {
       case InputDistribution::Zero: {
@@ -133,7 +133,7 @@ struct Data {
           fillKeysGaussian(gen);
         }
         std::sort(keys, keys + num);
-        std::size_t numberOfDisplacements = std::exp2(std::log10(num));
+        const std::size_t numberOfDisplacements = std::exp2(std::log10(num));
         std::uniform_int_distribution<std::size_t> dist(0, num - 1);
         for (std::size_t i = 0; i < numberOfDisplacements; i++) {
           std::swap(keys[dist(gen)], keys[dist(gen)]);
@@ -146,7 +146,7 @@ struct Data {
           fillKeysGaussian(gen);
         }
         std::sort(keys, keys + num, std::greater<K>());
-        std::size_t numberOfDisplacements = std::exp2(std::log10(num));
+        const std::size_t numberOfDisplacements = std::exp2(std::log10(num));
         std::uniform_int_distribution<std::size_t> dist(0, num - 1);
         for (std::size_t i = 0; i < numberOfDisplacements; i++) {
           std::swap(keys[dist(gen)], keys[dist(gen)]);
@@ -156,14 +156,15 @@ struct Data {
     makePayloads();
   }
 
-  Data(const Data &other) : num(other.num) {
-    keys = new K[num];
-    payloads = std::make_tuple(new Ps[num]...);
+  Data(const Data &other)
+      : keys(new K[other.num]),
+        payloads(std::make_tuple(new Ps[other.num]...)),
+        num(other.num) {
     std::copy(other.keys, other.keys + num, keys);
     std::apply(
-        [&](auto... newPayloads) {
+        [&](const auto... newPayloads) {
           std::apply(
-              [&](auto... otherPayloads) {
+              [&](const auto... otherPayloads) {
                 (std::copy(otherPayloads, otherPayloads + num, newPayloads),
                  ...);
               },
@@ -174,10 +175,11 @@ struct Data {
 
   ~Data() {
     delete[] keys;
-    std::apply([](Ps *...payloads) { (..., delete[] payloads); }, payloads);
+    std::apply([](const Ps *const... payloads) { (..., delete[] payloads); },
+               payloads);
   }
 
-  bool isSorted(bool up = true) const {
+  bool isSorted(const bool up = true) const {
     if (up) {
       for (std::size_t i = 1; i < num; ++i) {
         if (keys[i - 1] > keys[i]) {
@@ -213,7 +215,7 @@ struct Data {
     return true;
   }
 
-  std::size_t numUnsorted(bool up) const {
+  std::size_t numUnsorted(const bool up) const {
     std::size_t numUnsorted = 0;
     if (up) {
       for (std::size_t i = 1; i < num; ++i) {
@@ -234,16 +236,16 @@ struct Data {
   bool checkPayloads() const {
     for (std::size_t i = 0; i < num; ++i) {
       unsigned int seed = 0;
-      memcpy(&seed, &keys[i], std::min(sizeof(K), sizeof(uint)));
+      memcpy(&seed, &keys[i], std::min(sizeof(K), sizeof(seed)));
       srand(seed);
       bool payloadsOk = true;
-      auto checkPayload = [&](auto *payload) {
-        auto expectedPayload =
+      const auto checkPayload = [&](const auto *const payload) {
+        const auto expectedPayload =
             getRandom<std::remove_reference_t<decltype(*payload)>>();
         return memcmp(&payload[i], &expectedPayload, sizeof(payload[i])) == 0;
       };
       std::apply(
-          [&](Ps *...payloads) {
+          [&](const Ps *const... payloads) {
             payloadsOk &= (... && checkPayload(payloads));
           },
           payloads);
@@ -254,8 +256,8 @@ struct Data {
     return true;
   }
 
-  std::string checkData(bool up, const Data<K, Ps...> &original,
-                        bool checkSorted = true) const {
+  std::string checkData(const bool up, const Data<K, Ps...> &original,
+                        const bool checkSorted = true) const {
     bool passed = true;
     std::string errorMessage = "";
     if (checkSorted && !isSorted(up)) {
@@ -298,7 +300,9 @@ struct Data {
     for (std::size_t i = 0; i < num; ++i) {
       std::cout << "(" << +keys[i];
       std::apply(
-          [&](Ps *...payloads) { (..., (std::cout << ", " << +payloads[i])); },
+          [&](const Ps *const... payloads) {
+            (..., (std::cout << ", " << +payloads[i]));
+          },
           payloads);
       std::cout << "), ";
     }
@@ -312,12 +316,13 @@ struct Data {
     std::cout << std::endl;
   }
 
-  void convertToSingleArray(DataElement<K, Ps...> *keysAndPayloads) const {
+  void convertToSingleArray(
+      DataElement<K, Ps...> *const keysAndPayloads) const {
     for (std::size_t i = 0; i < num; ++i) {
       keysAndPayloads[i].key = keys[i];
       if constexpr (sizeof...(Ps) > 0) {
         std::apply(
-            [&](Ps *...payloads) {
+            [&](const Ps *const... payloads) {
               keysAndPayloads[i].payloads = std::make_tuple(payloads[i]...);
             },
             payloads);
@@ -325,14 +330,16 @@ struct Data {
     }
   }
 
-  void setFromSingleArray(DataElement<K, Ps...> *keysAndPayloads) {
+  void setFromSingleArray(const DataElement<K, Ps...> *const keysAndPayloads) {
     for (std::size_t i = 0; i < num; ++i) {
       keys[i] = keysAndPayloads[i].key;
       if constexpr (sizeof...(Ps) > 0) {
         std::apply(
-            [&](Ps... payloadsIn) {
+            [&](const Ps... payloadsIn) {
               std::apply(
-                  [&](Ps *...payloads) { ((payloads[i] = payloadsIn), ...); },
+                  [&](Ps *const... payloads) {
+                    ((payloads[i] = payloadsIn), ...);
+                  },
                   payloads);
             },
             keysAndPayloads[i].payloads);
@@ -376,7 +383,7 @@ struct Data {
       memcpy(&seed, &keys[i], std::min(sizeof(K), sizeof(uint)));
       srand(seed);
       std::apply(
-          [&](auto &...payloads) {
+          [&](const auto &...payloads) {
             (...,
              (payloads[i] =
                   getRandom<std::remove_reference_t<decltype(payloads[i])>>()));
