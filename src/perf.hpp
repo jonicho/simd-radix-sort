@@ -10,17 +10,10 @@
 #include <string>
 #include <tuple>
 
-#include "../blacher/avx2sort.h"
-#include "../bramas/sort512.hpp"
-#include "../bramas/sort512kv.hpp"
 #include "common.hpp"
 #include "data.hpp"
-#include "ipp_radix.hpp"
 #include "radix_sort.hpp"
-
-#if __has_include("../moeller/SIMDRadixSortGeneric.H")
-#include "../moeller/SIMDRadixSortGeneric.H"
-#endif
+#include "sort_methods.hpp"
 
 namespace simd_sort {
 
@@ -31,248 +24,6 @@ const std::string dataDir = "/tmp/radixSortData-gcc";
 #elif
 #error "Unknown compiler"
 #endif
-
-template <typename BitSorter, typename CmpSorter, bool Combined = false>
-struct SortMethodRadixSort {
-  static std::string name() {
-    std::string result = "Radix";
-    if constexpr (std::is_same_v<BitSorter, radix_sort::BitSorterSequential>) {
-      result += "Seq";
-    } else if constexpr (std::is_same_v<BitSorter,
-                                        radix_sort::BitSorterSIMD<false>>) {
-      result += "SIMD";
-    } else if constexpr (std::is_same_v<BitSorter,
-                                        radix_sort::BitSorterSIMD<true>>) {
-      result += "SIMDOneReg";
-    }
-    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
-      result += "BramSmall";
-    } else if constexpr (std::is_same_v<CmpSorter, CmpSorterNoSort>) {
-      result += "NoCmp";
-    }
-    if constexpr (Combined) {
-      result += "Combined";
-    }
-    return result;
-  }
-  static constexpr bool areKeyAndPayloadSeparate = !Combined;
-  static constexpr bool hasThreshold = true;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    if constexpr (Combined && sizeof...(Ps) != 0) {
-      return false;
-    }
-    // if the one reg version does not have a difference, don't test it
-    if constexpr (std::is_same_v<BitSorter, radix_sort::BitSorterSIMD<true>>) {
-      if constexpr (std::max({std::size_t(0), sizeof(Ps)...}) <= sizeof(K)) {
-        return false;
-      }
-    }
-    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
-      if constexpr (sizeof...(Ps) == 0) {
-        return std::is_same_v<K, int> || std::is_same_v<K, double>;
-      }
-      if constexpr (sizeof...(Ps) == 1) {
-        return std::is_same_v<K, int> && std::is_same_v<int, Ps...>;
-      }
-      return false;
-    }
-    return true;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num, K *const keys, Ps *const... payloads) {
-    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
-      sortThresh(16 * 64 / sizeof(K), num, keys, payloads...);
-    } else {
-      if constexpr (std::is_same_v<BitSorter,
-                                   radix_sort::BitSorterSequential>) {
-        sortThresh(64, num, keys, payloads...);
-      } else {
-        sortThresh(16, num, keys, payloads...);
-      }
-    }
-  }
-
-  template <typename K, typename... Ps>
-  static void sortThresh(const SortIndex cmpSortThresh, const SortIndex num,
-                         K *const keys, Ps *const... payloads) {
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    radix_sort::sort<true, BitSorter, CmpSorter>(cmpSortThresh, num, keys,
-                                                 payloads...);
-  }
-};
-
-#ifdef _SIMD_RADIX_SORT_GENERIC_H_
-struct SortMethodMoellerCompress {
-  static std::string name() { return "MoellerCompress"; }
-  static constexpr bool areKeyAndPayloadSeparate = false;
-  static constexpr bool hasThreshold = true;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    if constexpr (sizeof...(Ps) > 1) {
-      return false;
-    }
-    if constexpr (!((sizeof(K) >= sizeof(Ps)) && ...)) {
-      return false;
-    }
-    return true;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num, DataElement<K, Ps...> *const elems) {
-    sortThresh(16, num, elems);
-  }
-
-  template <typename K>
-  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
-                         DataElement<K> *const elems) {
-    radix::simdRadixSortCompress<K, true>(
-        (typename radix::UInt<sizeof(K)>::T *)elems, 0, num - 1, cmpSortThresh);
-  }
-
-  template <typename K, typename P>
-  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
-                         DataElement<K, P> *const elems) {
-    static_assert(sizeof(K) >= sizeof(P), "Unsupported type combination");
-    radix::simdRadixSortCompress<K, true>(
-        (typename radix::UInt<sizeof(K)>::T2 *)elems, 0, num - 1,
-        cmpSortThresh);
-  }
-};
-
-struct SortMethodMoellerSeq {
-  static std::string name() { return "MoellerSeq"; }
-  static constexpr bool areKeyAndPayloadSeparate = false;
-  static constexpr bool hasThreshold = true;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    if constexpr (sizeof...(Ps) > 1) {
-      return false;
-    }
-    if constexpr (!((sizeof(K) == sizeof(Ps)) && ...)) {
-      return false;
-    }
-    return true;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num, DataElement<K, Ps...> *const elems) {
-    sortThresh(64, num, elems);
-  }
-
-  template <typename K>
-  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
-                         DataElement<K> *const elems) {
-    radix::seqRadixSort<K, true>((typename radix::UInt<sizeof(K)>::T *)elems, 0,
-                                 num - 1, cmpSortThresh);
-  }
-
-  template <typename K, typename P>
-  static void sortThresh(const std::size_t cmpSortThresh, const std::size_t num,
-                         DataElement<K, P> *const elems) {
-    static_assert(sizeof(K) >= sizeof(P), "Unsupported type combination");
-    radix::seqRadixSort<K, true>((typename radix::UInt<sizeof(K)>::T2 *)elems,
-                                 0, num - 1, cmpSortThresh);
-  }
-};
-#endif  // _SIMD_RADIX_SORT_GENERIC_H_
-
-struct SortMethodSTLSort {
-  static std::string name() { return "STLSort"; }
-  static constexpr bool areKeyAndPayloadSeparate = false;
-  static constexpr bool hasThreshold = false;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    return true;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num,
-                   DataElement<K, Ps...> *const keysAndPayloads) {
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    std::sort(keysAndPayloads, keysAndPayloads + num);
-  }
-};
-
-#ifdef IPP_RADIX_IS_PRESENT_
-struct SortMethodIPPRadix {
-  static std::string name() { return "IPPRadix"; }
-  static constexpr bool areKeyAndPayloadSeparate = false;
-  static constexpr bool hasThreshold = false;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    return sizeof...(Ps) == 0 && !std::is_same_v<K, int8_t>;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num,
-                   DataElement<K, Ps...> *const keysAndPayloads) {
-    static_assert(sizeof...(Ps) == 0, "IPPRadix does not support payloads");
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    ipp_radix::sort((K *)keysAndPayloads, num);
-  }
-};
-#endif  // IPP_RADIX_IS_PRESENT_
-
-struct SortMethodBramas {
-  static std::string name() { return "BramasSort"; }
-  static constexpr bool areKeyAndPayloadSeparate = true;
-  static constexpr bool hasThreshold = false;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    if constexpr (sizeof...(Ps) == 0) {
-      return std::is_same_v<K, int> || std::is_same_v<K, double>;
-    }
-    if constexpr (sizeof...(Ps) == 1) {
-      return std::is_same_v<K, int> && std::is_same_v<int, Ps...>;
-    }
-    return false;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num, K *const keys, Ps *const... payloads) {
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    static_assert(sizeof...(Ps) == 0 || sizeof...(Ps) == 1,
-                  "SortMethodBramas does not support more than 1 payload");
-    if constexpr (sizeof...(Ps) == 1) {
-      static_assert(
-          std::is_same_v<K, Ps...>,
-          "SortMethodBramas requires the same type for key and payload");
-    }
-    if constexpr (sizeof...(Ps) == 0) {
-      Sort512::Sort(keys, num);
-    } else if constexpr (sizeof...(Ps) == 1) {
-      Sort512kv::Sort(keys, payloads..., num);
-    } else {
-    }
-  }
-};
-
-struct SortMethodBlacher {
-  static std::string name() { return "BlacherSort"; }
-  static constexpr bool areKeyAndPayloadSeparate = true;
-  static constexpr bool hasThreshold = false;
-
-  template <typename K, typename... Ps>
-  static constexpr bool isSupported() {
-    return sizeof...(Ps) == 0 && std::is_same_v<K, int32_t>;
-  }
-
-  template <typename K, typename... Ps>
-  static void sort(const SortIndex num, K *const keys, Ps *const...) {
-    static_assert(sizeof...(Ps) == 0 && std::is_same_v<K, int32_t>,
-                  "SortMethodBlacher only supports int32_t key and no payload");
-    static_assert(isSupported<K, Ps...>(), "Unsupported type combination");
-    avx2::quicksort(keys, num);
-  }
-};
 
 template <typename SortMethod, typename K, typename... Ps>
 double measureTimePerElement(const Data<K, Ps...> &data) {
@@ -479,8 +230,8 @@ static std::string perfTestSpeedup(const size_t num) {
     // enough to avoid taking too long
     return "";
   }
-  if constexpr (!SortMethodRelTo::template isSupported<K, Ps...>() ||
-                !SortMethod::template isSupported<K, Ps...>()) {
+  if constexpr (!SortMethodRelTo::template isSupported<true, K, Ps...>() ||
+                !SortMethod::template isSupported<true, K, Ps...>()) {
     return "";
   }
   const double sumTimePerElementRel =
@@ -648,7 +399,7 @@ struct PerfTest {
               file << " 0";
               return;
             }
-            if constexpr (SortMethods::template isSupported<K, Ps...>()) {
+            if constexpr (SortMethods::template isSupported<true, K, Ps...>()) {
               file << " "
                    << measureTimePerElementWithRepsAndWarmup<SortMethods, K,
                                                              Ps...>(
@@ -695,7 +446,7 @@ struct PerfTest {
             file << SortMethods::name() << " " << 0 << std::endl;
             return;
           }
-          if constexpr (SortMethods::template isSupported<K, Ps...>()) {
+          if constexpr (SortMethods::template isSupported<true, K, Ps...>()) {
             file << SortMethods::name() << " "
                  << measureTimePerElementWithRepsAndWarmup<SortMethods, K,
                                                            Ps...>(num,
@@ -714,7 +465,7 @@ struct PerfTest {
     (
         [&]() {
           if constexpr (SortMethods::hasThreshold &&
-                        SortMethods::template isSupported<K, Ps...>()) {
+                        SortMethods::template isSupported<true, K, Ps...>()) {
             perfTestThresh<SortMethods, Distribution, K, Ps...>();
           }
         }(),

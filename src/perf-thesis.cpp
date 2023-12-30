@@ -7,6 +7,7 @@
 #include "data.hpp"
 #include "perf.hpp"
 #include "radix_sort.hpp"
+#include "sort_methods.hpp"
 
 #if __has_include("../moeller/SIMDRadixSortGeneric.H")
 #include "../moeller/SIMDRadixSortGeneric.H"
