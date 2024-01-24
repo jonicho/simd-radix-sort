@@ -12,6 +12,7 @@
 #include "common.hpp"
 #include "data.hpp"
 #include "ipp_radix.hpp"
+#include "quick_sort.hpp"
 #include "radix_sort.hpp"
 
 #if __has_include("../moeller/SIMDRadixSortGeneric.H")
@@ -32,17 +33,24 @@ struct SortMethodRadixSort {
     } else if constexpr (std::is_same_v<BitSorter,
                                         radix_sort::BitSorterSIMD<true>>) {
       result += "SIMDOneReg";
+    } else {
+      static_assert(always_false_v<BitSorter>, "Unknown BitSorter");
     }
-    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterInsertionSort>) {
+      // don't add anything
+    } else if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
       result += "BramSmall";
     } else if constexpr (std::is_same_v<CmpSorter, CmpSorterNoSort>) {
       result += "NoCmp";
+    } else {
+      static_assert(always_false_v<CmpSorter>, "Unknown CmpSorter");
     }
     if constexpr (Combined) {
       result += "Combined";
     }
     return result;
   }
+
   static constexpr bool areKeyAndPayloadSeparate = !Combined;
   static constexpr bool hasThreshold = true;
 
@@ -86,6 +94,75 @@ struct SortMethodRadixSort {
     static_assert(isSupported<Up, K, Ps...>(), "Unsupported type combination");
     radix_sort::sort<Up, BitSorter, CmpSorter>(cmpSortThresh, num, keys,
                                                payloads...);
+  }
+};
+
+template <typename Partitioner, typename CmpSorter, bool Combined = false>
+struct SortMethodQuickSort {
+  static std::string name() {
+    std::string result = "Quick";
+    if constexpr (std::is_same_v<Partitioner,
+                                 quick_sort::PartitionerSequential>) {
+      result += "Seq";
+    } else if constexpr (std::is_same_v<Partitioner,
+                                        quick_sort::PartitionerSIMD>) {
+      result += "SIMD";
+    } else {
+      static_assert(always_false_v<Partitioner>, "Unknown Partitioner");
+    }
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterInsertionSort>) {
+      // don't add anything
+    } else if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
+      result += "BramSmall";
+    } else if constexpr (std::is_same_v<CmpSorter, CmpSorterNoSort>) {
+      result += "NoCmp";
+    } else {
+      static_assert(always_false_v<CmpSorter>, "Unknown CmpSorter");
+    }
+    if constexpr (Combined) {
+      result += "Combined";
+    }
+    return result;
+  }
+
+  static constexpr bool areKeyAndPayloadSeparate = !Combined;
+  static constexpr bool hasThreshold = true;
+
+  template <bool Up, typename K, typename... Ps>
+  static constexpr bool isSupported() {
+    // if constexpr (Combined && sizeof...(Ps) != 0) {
+    //   return false;
+    // }
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
+      if constexpr (!Up) {
+        return false;
+      }
+      if constexpr (sizeof...(Ps) == 0) {
+        return std::is_same_v<K, int> || std::is_same_v<K, double>;
+      }
+      if constexpr (sizeof...(Ps) == 1) {
+        return (std::is_same_v<K, int> && std::is_same_v<int, Ps...>);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  template <bool Up = true, typename K, typename... Ps>
+  static void sort(const SortIndex num, K *const keys, Ps *const... payloads) {
+    if constexpr (std::is_same_v<CmpSorter, CmpSorterBramasSmallSort>) {
+      sortThresh<Up>(16 * 64 / sizeof(K), num, keys, payloads...);
+    } else {
+      sortThresh<Up>(16, num, keys, payloads...);
+    }
+  }
+
+  template <bool Up = true, typename K, typename... Ps>
+  static void sortThresh(const SortIndex cmpSortThresh, const SortIndex num,
+                         K *const keys, Ps *const... payloads) {
+    static_assert(isSupported<Up, K, Ps...>(), "Unsupported type combination");
+    quick_sort::sort<Up, Partitioner, CmpSorter>(cmpSortThresh, num, keys,
+                                                 payloads...);
   }
 };
 

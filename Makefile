@@ -1,7 +1,7 @@
 BUILD_DIR ?= ./build
 
 CPPFLAGS = $(CXXFLAGS) -MMD -MP -std=c++20 -O3\
- -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi2\
+ -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vbmi -mavx512vbmi2\
  -Wall -Wextra -Wpedantic\
  -Werror
 

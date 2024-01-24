@@ -4,8 +4,11 @@
 #include <immintrin.h>
 #include <popcntintrin.h>
 
+#include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 #include "common.hpp"
@@ -108,6 +111,7 @@ using MaskType = typename _MaskType<Size>::type;
 
 template <std::size_t Size>
 struct Mask {
+  static constexpr std::size_t size = Size;
   MaskType<Size> k;
   Mask() = default;
   Mask(const MaskType<Size> &x) : k(x) {}
@@ -466,6 +470,820 @@ static inline Mask<Vec<T, Bytes>::numElems> test_bit(const Vec<T, Bytes> v,
         static_assert(always_false_v<T>, "Unsupported type size");
       }
 #endif  // __AVX512VL__
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <typename KeyType, typename T, std::size_t Bytes>
+static inline Mask<Vec<T, Bytes>::numElems> cmple_keys(const Vec<T, Bytes> a,
+                                                       const KeyType pivot) {
+  constexpr auto factor = sizeof(T) / sizeof(KeyType);
+  if constexpr (Bytes == 64) {
+#ifdef __AVX512BW__
+    if constexpr (std::is_same_v<KeyType, uint8_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epu8_mask(a, _mm512_set1_epi8(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys = _mm512_castsi512_si256(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 62, 60,
+                            58, 56, 54, 52, 50, 48, 46, 44, 42, 40, 38, 36, 34,
+                            32, 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8,
+                            6, 4, 2, 0),
+            a));
+        return _mm256_cmple_epu8_mask(packed_keys, _mm256_set1_epi8(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 56,
+                            52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4,
+                            0),
+            a));
+        return _mm_cmple_epu8_mask(packed_keys, _mm_set1_epi8(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 56, 48, 40, 32, 24, 16, 8, 0),
+            a));
+        return __mmask8(_mm_cmple_epu8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else if constexpr (factor == 16) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 48, 48, 32, 32, 16, 16, 0, 0),
+            a));
+        return __mmask8(_mm_cmple_epu8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else if constexpr (factor == 32) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 32, 32, 32, 32, 0, 0, 0, 0),
+            a));
+        return __mmask8(_mm_cmple_epu8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else if constexpr (factor == 64) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            a));
+        return __mmask8(_mm_cmple_epu8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int8_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epi8_mask(a, _mm512_set1_epi8(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys = _mm512_castsi512_si256(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 62, 60,
+                            58, 56, 54, 52, 50, 48, 46, 44, 42, 40, 38, 36, 34,
+                            32, 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8,
+                            6, 4, 2, 0),
+            a));
+        return _mm256_cmple_epi8_mask(packed_keys, _mm256_set1_epi8(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60, 56,
+                            52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4,
+                            0),
+            a));
+        return _mm_cmple_epi8_mask(packed_keys, _mm_set1_epi8(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 56, 48, 40, 32, 24, 16, 8, 0),
+            a));
+        return __mmask8(_mm_cmple_epi8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else if constexpr (factor == 16) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 48, 48, 32, 32, 16, 16, 0, 0),
+            a));
+        return __mmask8(_mm_cmple_epi8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else if constexpr (factor == 32) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 32, 32, 32, 32, 0, 0, 0, 0),
+            a));
+        return __mmask8(_mm_cmple_epi8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else if constexpr (factor == 64) {
+        const auto packed_keys = _mm512_castsi512_si128(_mm512_permutexvar_epi8(
+            _mm512_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            a));
+        return __mmask8(_mm_cmple_epi8_mask(packed_keys, _mm_set1_epi8(pivot)));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, uint16_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epu16_mask(a, _mm512_set1_epi16(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys =
+            _mm512_castsi512_si256(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8,
+                                 6, 4, 2, 0),
+                a));
+        return _mm256_cmple_epu16_mask(packed_keys, _mm256_set1_epi16(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 28, 24, 20, 16, 12, 8,
+                                 4, 0),
+                a));
+        return _mm_cmple_epu16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 24, 24, 16, 16, 8, 8,
+                                 0, 0),
+                a));
+        return _mm_cmple_epu16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else if constexpr (factor == 16) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 16, 16, 16, 16, 0, 0,
+                                 0, 0),
+                a));
+        return _mm_cmple_epu16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else if constexpr (factor == 32) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0),
+                a));
+        return _mm_cmple_epu16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int16_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epi16_mask(a, _mm512_set1_epi16(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys =
+            _mm512_castsi512_si256(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8,
+                                 6, 4, 2, 0),
+                a));
+        return _mm256_cmple_epi16_mask(packed_keys, _mm256_set1_epi16(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 28, 24, 20, 16, 12, 8,
+                                 4, 0),
+                a));
+        return _mm_cmple_epi16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 24, 24, 16, 16, 8, 8,
+                                 0, 0),
+                a));
+        return _mm_cmple_epi16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else if constexpr (factor == 16) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 16, 16, 16, 16, 0, 0,
+                                 0, 0),
+                a));
+        return _mm_cmple_epi16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else if constexpr (factor == 32) {
+        const auto packed_keys =
+            _mm512_castsi512_si128(_mm512_permutexvar_epi16(
+                _mm512_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                 0),
+                a));
+        return _mm_cmple_epi16_mask(packed_keys, _mm_set1_epi16(pivot));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else
+#endif
+        if constexpr (std::is_same_v<KeyType, uint32_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epu32_mask(a, _mm512_set1_epi32(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys =
+            _mm512_castsi512_si256(_mm512_permutexvar_epi32(
+                _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 14, 12, 10, 8, 6, 4, 2,
+                                 0),
+                a));
+        return _mm256_cmple_epu32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0,
+                                                      12, 12, 8, 8, 4, 4, 0, 0),
+                                     a));
+        return _mm256_cmple_epu32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 8,
+                                                      8, 8, 8, 0, 0, 0, 0),
+                                     a));
+        return _mm256_cmple_epu32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else if constexpr (factor == 16) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                                      0, 0, 0, 0, 0, 0, 0),
+                                     a));
+        return _mm256_cmple_epu32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int32_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epi32_mask(a, _mm512_set1_epi32(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys =
+            _mm512_castsi512_si256(_mm512_permutexvar_epi32(
+                _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 14, 12, 10, 8, 6, 4, 2,
+                                 0),
+                a));
+        return _mm256_cmple_epi32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0,
+                                                      12, 12, 8, 8, 4, 4, 0, 0),
+                                     a));
+        return _mm256_cmple_epi32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 8,
+                                                      8, 8, 8, 0, 0, 0, 0),
+                                     a));
+        return _mm256_cmple_epi32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else if constexpr (factor == 16) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                                      0, 0, 0, 0, 0, 0, 0),
+                                     a));
+        return _mm256_cmple_epi32_mask(packed_keys, _mm256_set1_epi32(pivot));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, uint64_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epu64_mask(a, _mm512_set1_epi64(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(6, 6, 4, 4, 2, 2, 0, 0), a);
+        return _mm512_cmple_epu64_mask(packed_keys, _mm512_set1_epi64(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(4, 4, 4, 4, 0, 0, 0, 0), a);
+        return _mm512_cmple_epu64_mask(packed_keys, _mm512_set1_epi64(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0, 0), a);
+        return _mm512_cmple_epu64_mask(packed_keys, _mm512_set1_epi64(pivot));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int64_t>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmple_epi64_mask(a, _mm512_set1_epi64(pivot));
+      } else if constexpr (factor == 2) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(6, 6, 4, 4, 2, 2, 0, 0), a);
+        return _mm512_cmple_epi64_mask(packed_keys, _mm512_set1_epi64(pivot));
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(4, 4, 4, 4, 0, 0, 0, 0), a);
+        return _mm512_cmple_epi64_mask(packed_keys, _mm512_set1_epi64(pivot));
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0, 0), a);
+        return _mm512_cmple_epi64_mask(packed_keys, _mm512_set1_epi64(pivot));
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, float>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmp_ps_mask(_mm512_castsi512_ps(a), _mm512_set1_ps(pivot),
+                                  _CMP_LE_OS);
+      } else if constexpr (factor == 2) {
+        const auto packed_keys =
+            _mm512_castsi512_si256(_mm512_permutexvar_epi32(
+                _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 14, 12, 10, 8, 6, 4, 2,
+                                 0),
+                a));
+        return _mm256_cmp_ps_mask(_mm256_castsi256_ps(packed_keys),
+                                  _mm256_set1_ps(pivot), _CMP_LE_OS);
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0,
+                                                      12, 12, 8, 8, 4, 4, 0, 0),
+                                     a));
+        return _mm256_cmp_ps_mask(_mm256_castsi256_ps(packed_keys),
+                                  _mm256_set1_ps(pivot), _CMP_LE_OS);
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 8,
+                                                      8, 8, 8, 0, 0, 0, 0),
+                                     a));
+        return _mm256_cmp_ps_mask(_mm256_castsi256_ps(packed_keys),
+                                  _mm256_set1_ps(pivot), _CMP_LE_OS);
+      } else if constexpr (factor == 16) {
+        const auto packed_keys = _mm512_castsi512_si256(
+            _mm512_permutexvar_epi32(_mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                                      0, 0, 0, 0, 0, 0, 0),
+                                     a));
+        return _mm256_cmp_ps_mask(_mm256_castsi256_ps(packed_keys),
+                                  _mm256_set1_ps(pivot), _CMP_LE_OS);
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else if constexpr (std::is_same_v<KeyType, double>) {
+      if constexpr (factor == 1) {
+        return _mm512_cmp_pd_mask(_mm512_castsi512_pd(a), _mm512_set1_pd(pivot),
+                                  _CMP_LE_OS);
+      } else if constexpr (factor == 2) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(6, 6, 4, 4, 2, 2, 0, 0), a);
+        return _mm512_cmp_pd_mask(_mm512_castsi512_pd(packed_keys),
+                                  _mm512_set1_pd(pivot), _CMP_LE_OS);
+      } else if constexpr (factor == 4) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(4, 4, 4, 4, 0, 0, 0, 0), a);
+        return _mm512_cmp_pd_mask(_mm512_castsi512_pd(packed_keys),
+                                  _mm512_set1_pd(pivot), _CMP_LE_OS);
+      } else if constexpr (factor == 8) {
+        const auto packed_keys = _mm512_permutexvar_epi64(
+            _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0, 0), a);
+        return _mm512_cmp_pd_mask(_mm512_castsi512_pd(packed_keys),
+                                  _mm512_set1_pd(pivot), _CMP_LE_OS);
+      } else {
+        static_assert(always_false_v<T>);
+      }
+    } else {
+      static_assert(always_false_v<T>, "Unsupported type");
+    }
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <typename T, std::size_t Bytes>
+static inline Vec<T, Bytes> min(const Vec<T, Bytes> a, const Vec<T, Bytes> b) {
+  if constexpr (Bytes == 64) {
+    if constexpr (std::is_same_v<T, uint8_t>) {
+      return _mm512_min_epu8(a, b);
+    } else if constexpr (std::is_same_v<T, uint16_t>) {
+      return _mm512_min_epu16(a, b);
+    } else if constexpr (std::is_same_v<T, uint32_t>) {
+      return _mm512_min_epu32(a, b);
+    } else if constexpr (std::is_same_v<T, uint64_t>) {
+      return _mm512_min_epu64(a, b);
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+      return _mm512_min_epi8(a, b);
+    } else if constexpr (std::is_same_v<T, int16_t>) {
+      return _mm512_min_epi16(a, b);
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+      return _mm512_min_epi32(a, b);
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+      return _mm512_min_epi64(a, b);
+    } else if constexpr (std::is_same_v<T, float>) {
+      return _mm512_castps_si512(
+          _mm512_min_ps(_mm512_castsi512_ps(a), _mm512_castsi512_ps(b)));
+    } else if constexpr (std::is_same_v<T, double>) {
+      return _mm512_castpd_si512(
+          _mm512_min_pd(_mm512_castsi512_pd(a), _mm512_castsi512_pd(b)));
+    } else {
+      static_assert(always_false_v<T>, "Unsupported type");
+    }
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <typename T, std::size_t Bytes>
+static inline Vec<T, Bytes> max(const Vec<T, Bytes> a, const Vec<T, Bytes> b) {
+  if constexpr (Bytes == 64) {
+    if constexpr (std::is_same_v<T, uint8_t>) {
+      return _mm512_max_epu8(a, b);
+    } else if constexpr (std::is_same_v<T, uint16_t>) {
+      return _mm512_max_epu16(a, b);
+    } else if constexpr (std::is_same_v<T, uint32_t>) {
+      return _mm512_max_epu32(a, b);
+    } else if constexpr (std::is_same_v<T, uint64_t>) {
+      return _mm512_max_epu64(a, b);
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+      return _mm512_max_epi8(a, b);
+    } else if constexpr (std::is_same_v<T, int16_t>) {
+      return _mm512_max_epi16(a, b);
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+      return _mm512_max_epi32(a, b);
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+      return _mm512_max_epi64(a, b);
+    } else if constexpr (std::is_same_v<T, float>) {
+      return _mm512_castps_si512(
+          _mm512_max_ps(_mm512_castsi512_ps(a), _mm512_castsi512_ps(b)));
+    } else if constexpr (std::is_same_v<T, double>) {
+      return _mm512_castpd_si512(
+          _mm512_max_pd(_mm512_castsi512_pd(a), _mm512_castsi512_pd(b)));
+    } else {
+      static_assert(always_false_v<T>, "Unsupported type");
+    }
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <std::size_t Factor, typename T, std::size_t Bytes>
+static inline T reduce_keys_min(const Vec<T, Bytes> v) {
+  using KeyType = T;
+  if constexpr (Bytes == 64) {
+    if constexpr (std::is_same_v<KeyType, uint32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_min_epu32(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epu32(0x5555, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epu32(0x1111, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_epu32(0x0101, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_min_epi32(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epi32(0x5555, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epi32(0x1111, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_epi32(0x0101, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, uint64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_min_epu64(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epu64(0x55, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epu64(0x11, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, int64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_min_epi64(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epi64(0x55, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epi64(0x11, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, float>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_min_ps(_mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_ps(0x5555, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_ps(0x1111, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_ps(0x0101, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 16) {
+        return std::bit_cast<float>(_mm512_cvtsi512_si32(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, double>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_min_pd(_mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_pd(0x55, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_pd(0x11, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 8) {
+        return std::bit_cast<double>(
+            _mm_cvtsi128_si64(_mm512_castsi512_si128(v)));
+      }
+    } else {
+      // TODO: more efficient implementation for 8 and 16 bit types
+      KeyType tmp[Vec<KeyType, Bytes>::numElems];
+      std::memcpy(tmp, &v, Bytes);
+      KeyType min = std::numeric_limits<KeyType>::max();
+      for (std::size_t i = 0; i < Vec<KeyType, Bytes>::numElems; i += Factor) {
+        min = std::min(min, tmp[i]);
+      }
+      return min;
+    }
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <std::size_t Factor, typename T, std::size_t Bytes>
+static inline T reduce_keys_max(const Vec<T, Bytes> v) {
+  using KeyType = T;
+  if constexpr (Bytes == 64) {
+    if constexpr (std::is_same_v<KeyType, uint32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_max_epu32(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epu32(0x5555, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epu32(0x1111, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_epu32(0x0101, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_max_epi32(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epi32(0x5555, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epi32(0x1111, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_epi32(0x0101, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, uint64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_max_epu64(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epu64(0x55, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epu64(0x11, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, int64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_max_epi64(v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epi64(0x55, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epi64(0x11, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, float>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_max_ps(_mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_ps(0x5555, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_ps(0x1111, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_ps(0x0101, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 16) {
+        return std::bit_cast<float>(_mm512_cvtsi512_si32(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, double>) {
+      if constexpr (Factor == 1) {
+        return _mm512_reduce_max_pd(_mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_pd(0x55, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_pd(0x11, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 8) {
+        return std::bit_cast<double>(
+            _mm_cvtsi128_si64(_mm512_castsi512_si128(v)));
+      }
+    } else {
+      // TODO: more efficient implementation for 8 and 16 bit types
+      KeyType tmp[Vec<KeyType, Bytes>::numElems];
+      std::memcpy(tmp, &v, Bytes);
+      KeyType max = std::numeric_limits<KeyType>::min();
+      for (std::size_t i = 0; i < Vec<KeyType, Bytes>::numElems; i += Factor) {
+        max = std::max(max, tmp[i]);
+      }
+      return max;
+    }
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <std::size_t Factor, typename T, std::size_t Bytes>
+static inline T reduce_keys_min(const Vec<T, Bytes> v,
+                                const std::size_t elems) {
+  using KeyType = T;
+  if (elems == 0) {
+    return std::numeric_limits<KeyType>::max();
+  } else if (elems == 1) {
+    KeyType result;
+    std::memcpy(&result, &v, sizeof(KeyType));
+    return result;
+  }
+  const auto mask = kshiftr(knot(Mask<Bytes / sizeof(KeyType)>(0)),
+                            (Bytes / sizeof(KeyType)) - elems * Factor);
+  if constexpr (Bytes == 64) {
+    if constexpr (std::is_same_v<KeyType, uint32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_min_epu32(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epu32(0x5555 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epu32(0x1111 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_epu32(0x0101 & mask, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_min_epi32(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epi32(0x5555 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epi32(0x1111 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_epi32(0x0101 & mask, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, uint64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_min_epu64(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epu64(0x55 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epu64(0x11 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, int64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_min_epi64(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_epi64(0x55 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_epi64(0x11 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, float>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_min_ps(mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_ps(0x5555 & mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_ps(0x1111 & mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_ps(0x0101 & mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 16) {
+        return std::bit_cast<float>(_mm512_cvtsi512_si32(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, double>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_min_pd(mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_min_pd(0x5555 & mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_min_pd(0x1111 & mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_min_pd(0x0101 & mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 16) {
+        return std::bit_cast<double>(
+            _mm_cvtsi128_si64(_mm512_castsi512_si128(v)));
+      }
+    } else {
+      // TODO: more efficient implementation for 8 and 16 bit types
+      KeyType tmp[Vec<KeyType, Bytes>::numElems];
+      std::memcpy(tmp, &v, Bytes);
+      KeyType min = std::numeric_limits<KeyType>::max();
+      for (std::size_t i = 0;
+           i < std::min(Vec<KeyType, Bytes>::numElems, elems * Factor);
+           i += Factor) {
+        min = std::min(min, tmp[i]);
+      }
+      return min;
+    }
+  } else {
+    static_assert(always_false_v<T>, "Unsupported vector size");
+  }
+}
+
+template <std::size_t Factor, typename T, std::size_t Bytes>
+static inline T reduce_keys_max(const Vec<T, Bytes> v,
+                                const std::size_t elems) {
+  using KeyType = T;
+  if (elems == 0) {
+    return std::numeric_limits<KeyType>::min();
+  } else if (elems == 1) {
+    KeyType result;
+    std::memcpy(&result, &v, sizeof(KeyType));
+    return result;
+  }
+  const auto mask = kshiftr(knot(Mask<Bytes / sizeof(KeyType)>(0)),
+                            (Bytes / sizeof(KeyType)) - elems * Factor);
+  if constexpr (Bytes == 64) {
+    if constexpr (std::is_same_v<KeyType, uint32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_max_epu32(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epu32(0x5555 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epu32(0x1111 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_epu32(0x0101 & mask, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, int32_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_max_epi32(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epi32(0x5555 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epi32(0x1111 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_epi32(0x0101 & mask, v);
+      } else if constexpr (Factor == 16) {
+        return _mm512_cvtsi512_si32(v);
+      }
+    } else if constexpr (std::is_same_v<KeyType, uint64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_max_epu64(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epu64(0x55 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epu64(0x11 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, int64_t>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_max_epi64(mask, v);
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_epi64(0x55 & mask, v);
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_epi64(0x11 & mask, v);
+      } else if constexpr (Factor == 8) {
+        return _mm_cvtsi128_si64(_mm512_castsi512_si128(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, float>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_max_ps(mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_ps(0x5555 & mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_ps(0x1111 & mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_ps(0x0101 & mask, _mm512_castsi512_ps(v));
+      } else if constexpr (Factor == 16) {
+        return std::bit_cast<float>(_mm512_cvtsi512_si32(v));
+      }
+    } else if constexpr (std::is_same_v<KeyType, double>) {
+      if constexpr (Factor == 1) {
+        return _mm512_mask_reduce_max_pd(mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 2) {
+        return _mm512_mask_reduce_max_pd(0x5555 & mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 4) {
+        return _mm512_mask_reduce_max_pd(0x1111 & mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 8) {
+        return _mm512_mask_reduce_max_pd(0x0101 & mask, _mm512_castsi512_pd(v));
+      } else if constexpr (Factor == 16) {
+        return std::bit_cast<double>(
+            _mm_cvtsi128_si64(_mm512_castsi512_si128(v)));
+      }
+    } else {
+      // TODO: more efficient implementation for 8 and 16 bit types
+      KeyType tmp[Vec<KeyType, Bytes>::numElems];
+      std::memcpy(tmp, &v, Bytes);
+      KeyType max = std::numeric_limits<KeyType>::min();
+      for (std::size_t i = 0;
+           i < std::min(Vec<KeyType, Bytes>::numElems, elems * Factor);
+           i += Factor) {
+        max = std::max(max, tmp[i]);
+      }
+      return max;
+    }
   } else {
     static_assert(always_false_v<T>, "Unsupported vector size");
   }

@@ -39,6 +39,19 @@ struct DataElement<K> {
   bool operator>(const DataElement &other) const { return key > other.key; }
 };
 
+template <typename K>
+static inline K getKey(const K &key) {
+  return key;
+}
+
+template <typename K, typename... Ps>
+static inline K getKey(const DataElement<K, Ps...> &dataElement) {
+  return dataElement.key;
+}
+
+template <typename K>
+using KeyType = decltype(getKey(std::declval<K>()));
+
 template <typename T>
 T getRandom() {
   std::array<uint8_t, sizeof(T)> randomBytes;

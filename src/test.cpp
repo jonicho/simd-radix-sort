@@ -11,6 +11,7 @@
 #include "cmp_sorters.hpp"
 #include "common.hpp"
 #include "data.hpp"
+#include "quick_sort.hpp"
 #include "radix_sort.hpp"
 #include "sort_methods.hpp"
 
@@ -112,6 +113,42 @@ bool testAllPayloads(const std::size_t num,
   passed &=
       testAllDistributions<Combined, Up, SortMethod, K, uint64_t, uint8_t>(
           num, seed);
+  passed &=
+      testAllDistributions<Combined, Up, SortMethod, K, uint64_t, uint64_t>(
+          num, seed);
+  passed &= testAllDistributions<Combined, Up, SortMethod, K, uint64_t,
+                                 uint64_t, uint64_t>(num, seed);
+  passed &=
+      testAllDistributions<Combined, Up, SortMethod, K, uint64_t, uint64_t,
+                           uint64_t, uint64_t, uint64_t, uint64_t, uint64_t>(
+          num, seed);
+  passed &= testAllDistributions<
+      Combined, Up, SortMethod, K, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+      uint8_t, uint8_t>(num, seed);
+  passed &=
+      testAllDistributions<Combined, Up, SortMethod, K, uint8_t, uint8_t,
+                           uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                           uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                           uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                           uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                           uint8_t, uint8_t, uint8_t, uint8_t, uint8_t>(num,
+                                                                        seed);
+  passed &= testAllDistributions<Combined, Up, SortMethod, K, uint8_t, uint8_t,
+                                 uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                                 uint8_t, uint8_t, uint8_t, uint8_t, uint8_t,
+                                 uint8_t, uint8_t, uint8_t>(num, seed);
+  passed &= testAllDistributions<Combined, Up, SortMethod, K, uint8_t, uint8_t,
+                                 uint8_t, uint8_t, uint8_t, uint8_t, uint8_t>(
+      num, seed);
+  passed &= testAllDistributions<Combined, Up, SortMethod, K, uint8_t, uint8_t,
+                                 uint8_t>(num, seed);
   return passed;
 }
 
@@ -170,6 +207,11 @@ int main(int argc, char const *argv[]) {
         testAllTypes<false, false,
                      SortMethodRadixSort<radix_sort::BitSorterSIMD<true>,
                                          CmpSorterBramasSmallSort>>(num, seed);
+    passed &= testAll<SortMethodQuickSort<quick_sort::PartitionerSequential,
+                                          CmpSorterInsertionSort>>(num, seed);
+    passed &=
+        testAll<SortMethodQuickSort<quick_sort::PartitionerSIMD,
+                                    CmpSorterInsertionSort, false>>(num, seed);
   }
 
   if (passed) {
