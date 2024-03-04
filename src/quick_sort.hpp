@@ -253,10 +253,51 @@ static inline auto getAverage(const std::floating_point auto a,
   return (a + b) / 2;
 }
 
+template <typename K>
+static inline KeyType<K> median(const K a, const K b, const K c) {
+  if (a < b) {
+    if (b < c) {
+      return b;
+    } else if (a < c) {
+      return c;
+    } else {
+      return a;
+    }
+  } else {
+    if (a < c) {
+      return a;
+    } else if (b < c) {
+      return c;
+    } else {
+      return b;
+    }
+  }
+}
+
+template <typename K>
+static inline KeyType<K> getMedianOf3(const SortIndex left,
+                                      const SortIndex right,
+                                      const K *const keys) {
+  const auto mid = left + (right - left) / 2;
+  return median(getKey(keys[left]), getKey(keys[mid]), getKey(keys[right]));
+}
+
+template <typename K>
+static inline KeyType<K> getMedianOf9(const SortIndex left,
+                                      const SortIndex right,
+                                      const K *const keys) {
+  const auto leftMid = left + (right - left) / 3;
+  const auto rightMid = left + 2 * (right - left) / 3;
+  return median(getMedianOf3(left, leftMid, keys),
+                getMedianOf3(leftMid + 1, rightMid, keys),
+                getMedianOf3(rightMid + 1, right, keys));
+}
+
 template <bool Up, typename Partitioner, typename CmpSorter, typename K,
           typename... Ps>
 void quickRecursion(const SortIndex cmpSortThreshold, const SortIndex left,
-                    const SortIndex right, const KeyType<K> avg, K *const keys,
+                    const SortIndex right, const bool chooseAvg,
+                    const KeyType<K> avg, K *const keys,
                     Ps *const... payloads) {
   if (right - left <= 0) {
     return;
@@ -266,27 +307,27 @@ void quickRecursion(const SortIndex cmpSortThreshold, const SortIndex left,
     return;
   }
 
-  const auto pivot = avg;
+  const auto pivot = chooseAvg ? avg : getMedianOf9(left, right, keys);
 
   const auto [split, smallestKey, largestKey] =
       Partitioner::template partition<Up>(pivot, left, right, keys,
                                           payloads...);
 
-  const bool wasPivotInRange = pivot >= smallestKey && pivot <= largestKey;
+  const double ratio =
+      (std::min(split - left, right - split + 1) / double(right - left + 1));
+
+  const bool nextChooseAvg = ratio < 0.2 ? !chooseAvg : chooseAvg;
 
   if (Up ? pivot > smallestKey : nextVal(pivot) < largestKey) {
-    const auto avg = wasPivotInRange
-                         ? getAverage(pivot, Up ? smallestKey : largestKey)
-                         : getAverage(smallestKey, largestKey);
-    quickRecursion<Up, Partitioner, CmpSorter>(
-        cmpSortThreshold, left, split - 1, avg, keys, payloads...);
+    const auto avg = getAverage(pivot, Up ? smallestKey : largestKey);
+    quickRecursion<Up, Partitioner, CmpSorter>(cmpSortThreshold, left,
+                                               split - 1, nextChooseAvg, avg,
+                                               keys, payloads...);
   }
   if (Up ? nextVal(pivot) < largestKey : pivot > smallestKey) {
-    const auto avg = wasPivotInRange
-                         ? getAverage(pivot, Up ? largestKey : smallestKey)
-                         : getAverage(smallestKey, largestKey);
-    quickRecursion<Up, Partitioner, CmpSorter>(cmpSortThreshold, split, right,
-                                               avg, keys, payloads...);
+    const auto avg = getAverage(pivot, Up ? largestKey : smallestKey);
+    quickRecursion<Up, Partitioner, CmpSorter>(
+        cmpSortThreshold, split, right, nextChooseAvg, avg, keys, payloads...);
   }
 }
 
@@ -303,7 +344,7 @@ void sort(SortIndex cmpSortThreshold, const SortIndex num, K *const keys,
   }
 #endif  // SORT512_HPP && SORT512KV_HPP
   quickRecursion<Up, Partitioner, CmpSorter>(
-      cmpSortThreshold, 0, num - 1,
+      cmpSortThreshold, 0, num - 1, false,
       getAverage(std::numeric_limits<KeyType<K>>::lowest(),
                  std::numeric_limits<KeyType<K>>::max()),
       keys, payloads...);
@@ -312,6 +353,10 @@ void sort(SortIndex cmpSortThreshold, const SortIndex num, K *const keys,
 template <bool Up = true, typename Partitioner, typename CmpSorter, typename K,
           typename... Ps>
 void sort(const SortIndex num, K *const keys, Ps *const... payloads) {
-  quickRecursion<Up, Partitioner, CmpSorter>(16, 0, num - 1, keys, payloads...);
+  quickRecursion<Up, Partitioner, CmpSorter>(
+      16, 0, num - 1, false,
+      getAverage(std::numeric_limits<KeyType<K>>::lowest(),
+                 std::numeric_limits<KeyType<K>>::max()),
+      keys, payloads...);
 }
 }  // namespace simd_sort::quick_sort
