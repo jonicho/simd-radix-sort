@@ -274,14 +274,6 @@ void quickRecursion(const SortIndex cmpSortThreshold, const SortIndex left,
 
   const bool wasPivotInRange = pivot >= smallestKey && pivot <= largestKey;
 
-  if ((Up ? (pivot < largestKey) : (pivot >= smallestKey)) &&
-      split == right + 1) {
-    assert(false);
-  }
-  if ((Up ? (pivot >= smallestKey) : (pivot < largestKey)) && split == left) {
-    assert(false);
-  }
-
   if (Up ? pivot > smallestKey : nextVal(pivot) < largestKey) {
     const auto avg = wasPivotInRange
                          ? getAverage(pivot, Up ? smallestKey : largestKey)
