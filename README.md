@@ -84,11 +84,13 @@ and run with:
 $ ./build/perf-thesis
 ```
 
-Note that to be able to run all tests of the [ `perf-thesis.cpp` ](src/perf-thesis.cpp) program, the following libraries need to be installed:
+The results of the experiments will be written to `/tmp/radixSortData-clang/` or `/tmp/radixSortData-gcc/` depending on the compiler used.
+
+Note that to be able to run all tests of the [`perf-thesis.cpp`](src/perf-thesis.cpp) program, the following libraries need to be installed:
 * [Intel IPP library](https://www.intel.com/content/www/us/en/developer/tools/oneapi/ipp.html), the environment variable `IPPROOT` needs to be set.
 * The generic SIMD implementation of MSB Radix Sort by Prof. Dr.-Ing. Ralf Möller (the file `SIMDRadixSortGeneric.H`), which is available [here](https://github.com/ti-uni-bielefeld/SIMDRadixSort) must be present in the [`moeller/`](moeller/) directory.
 
-If either of these libraries is not present, the [ `perf-thesis.cpp` ](src/perf-thesis.cpp) program will still be able to be compiled and run, but the tests that require them will not be executed.
+If either of these libraries is not present, the [`perf-thesis.cpp`](src/perf-thesis.cpp) program will still be able to be compiled and run, but the tests that require them will not be executed.
 
 ## Quicksort and research paper
 
